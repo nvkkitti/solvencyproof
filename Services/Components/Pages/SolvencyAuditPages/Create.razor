@@ -1,0 +1,130 @@
+@page "/solvencyaudits/create"
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create</PageTitle>
+
+<h1>Create</h1>
+
+<h2>SolvencyAudit</h2>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm method="post" Model="SolvencyAudit" OnValidSubmit="AddSolvencyAudit" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert"/>
+            <div class="mb-3">
+                <label for="timestamp" class="form-label">Timestamp:</label> 
+                <InputDate id="timestamp" @bind-Value="SolvencyAudit.Timestamp" class="form-control" /> 
+                <ValidationMessage For="() => SolvencyAudit.Timestamp" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="totalliabilities" class="form-label">TotalLiabilities:</label> 
+                <InputNumber id="totalliabilities" @bind-Value="SolvencyAudit.TotalLiabilities" class="form-control" /> 
+                <ValidationMessage For="() => SolvencyAudit.TotalLiabilities" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="totalassets" class="form-label">TotalAssets:</label> 
+                <InputNumber id="totalassets" @bind-Value="SolvencyAudit.TotalAssets" class="form-control" /> 
+                <ValidationMessage For="() => SolvencyAudit.TotalAssets" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="merkleroot" class="form-label">MerkleRoot (Base64):</label> 
+                <InputText id="merkleroot" @bind-Value="MerkleRootBase64" class="form-control" /> 
+                <ValidationMessage For="() => MerkleRootBase64" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="commitmentcv" class="form-label">CommitmentCv (Base64):</label> 
+                <InputText id="commitmentcv" @bind-Value="CommitmentCvBase64" class="form-control" /> 
+                <ValidationMessage For="() => CommitmentCvBase64" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="commitmentct" class="form-label">CommitmentCt (Base64):</label> 
+                <InputText id="commitmentct" @bind-Value="CommitmentCtBase64" class="form-control" /> 
+                <ValidationMessage For="() => CommitmentCtBase64" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="commitmentcdelta" class="form-label">CommitmentCDelta (Base64):</label> 
+                <InputText id="commitmentcdelta" @bind-Value="CommitmentCDeltaBase64" class="form-control" /> 
+                <ValidationMessage For="() => CommitmentCDeltaBase64" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="zkproof" class="form-label">ZkProof (Base64):</label> 
+                <InputText id="zkproof" @bind-Value="ZkProofBase64" class="form-control" /> 
+                <ValidationMessage For="() => ZkProofBase64" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="status" class="form-label">Status:</label> 
+                <InputText id="status" @bind-Value="StatusString" class="form-control" /> 
+                <ValidationMessage For="() => StatusString" class="text-danger" /> 
+            </div>        
+            <!-- Secret is a complex type; omit direct binding here or replace with an appropriate selector -->        
+            <button type="submit" class="btn btn-primary">Create</button>
+        </EditForm>
+    </div>
+</div>
+
+<div>
+    <a href="/solvencyaudits">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private SolvencyAudit SolvencyAudit { get; set; } = default!;
+
+    // String-backed properties that convert byte[] <-> Base64 for binding in the form
+    private string MerkleRootBase64
+    {
+        get => SolvencyAudit?.MerkleRoot != null && SolvencyAudit.MerkleRoot.Length > 0 ? Convert.ToBase64String(SolvencyAudit.MerkleRoot) : string.Empty;
+        set => SolvencyAudit.MerkleRoot = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
+    }
+
+    private string CommitmentCvBase64
+    {
+        get => SolvencyAudit?.CommitmentCv != null && SolvencyAudit.CommitmentCv.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCv) : string.Empty;
+        set => SolvencyAudit.CommitmentCv = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
+    }
+
+    private string CommitmentCtBase64
+    {
+        get => SolvencyAudit?.CommitmentCt != null && SolvencyAudit.CommitmentCt.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCt) : string.Empty;
+        set => SolvencyAudit.CommitmentCt = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
+    }
+
+    private string CommitmentCDeltaBase64
+    {
+        get => SolvencyAudit?.CommitmentCDelta != null && SolvencyAudit.CommitmentCDelta.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCDelta) : string.Empty;
+        set => SolvencyAudit.CommitmentCDelta = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
+    }
+
+    private string ZkProofBase64
+    {
+        get => SolvencyAudit?.ZkProof != null && SolvencyAudit.ZkProof.Length > 0 ? Convert.ToBase64String(SolvencyAudit.ZkProof) : string.Empty;
+        set => SolvencyAudit.ZkProof = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
+    }
+
+    private string StatusString
+    {
+        get => SolvencyAudit != null ? SolvencyAudit.Status.ToString() : string.Empty;
+        set
+        {
+            if (Enum.TryParse<AuditStatus>(value, out var s))
+            {
+                SolvencyAudit.Status = s;
+            }
+        }
+    }
+
+    protected override void OnInitialized() => SolvencyAudit ??= new();
+
+    // To protect from overposting attacks, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task AddSolvencyAudit()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.SolvencyAudit.Add(SolvencyAudit);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/solvencyaudits");
+    }
+}

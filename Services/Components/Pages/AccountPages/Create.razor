@@ -1,0 +1,83 @@
+@page "/accounts/create"
+@using System
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create</PageTitle>
+
+<h1>Create</h1>
+
+<h2>Account</h2>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm method="post" Model="Account" OnValidSubmit="AddAccount" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert"/>
+            <div class="mb-3">
+                <label for="balance" class="form-label">Balance:</label> 
+                <InputNumber id="balance" @bind-Value="Account.Balance" class="form-control" /> 
+                <ValidationMessage For="() => Account.Balance" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="merkleleafsalt" class="form-label">MerkleLeafSalt (base64):</label> 
+                <InputText id="merkleleafsalt" @bind-Value="MerkleLeafSaltText" class="form-control" /> 
+                <ValidationMessage For="() => MerkleLeafSaltText" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="lastupdate" class="form-label">LastUpdate:</label> 
+                <InputDate id="lastupdate" @bind-Value="Account.LastUpdate" class="form-control" /> 
+                <ValidationMessage For="() => Account.LastUpdate" class="text-danger" /> 
+            </div>        
+            <button type="submit" class="btn btn-primary">Create</button>
+        </EditForm>
+    </div>
+</div>
+
+<div>
+    <a href="/accounts">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Account Account { get; set; } = default!;
+
+    private string MerkleLeafSaltText { get; set; } = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Account ??= new();
+        MerkleLeafSaltText = Account.MerkleLeafSalt != null && Account.MerkleLeafSalt.Length > 0
+            ? Convert.ToBase64String(Account.MerkleLeafSalt)
+            : string.Empty;
+    }
+
+    // To protect from overposting attacks, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task AddAccount()
+    {
+        // Convert the base64 input into the byte[] expected by the model.
+        if (!string.IsNullOrWhiteSpace(MerkleLeafSaltText))
+        {
+            try
+            {
+                Account.MerkleLeafSalt = Convert.FromBase64String(MerkleLeafSaltText);
+            }
+            catch (FormatException)
+            {
+                // If parsing fails, set an empty array to avoid nulls. Validation can be added as needed.
+                Account.MerkleLeafSalt = Array.Empty<byte>();
+            }
+        }
+        else
+        {
+            Account.MerkleLeafSalt = Array.Empty<byte>();
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        context.Account.Add(Account);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/accounts");
+    }
+}

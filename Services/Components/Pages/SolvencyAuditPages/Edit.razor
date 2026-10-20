@@ -1,0 +1,192 @@
+@page "/solvencyaudits/edit"
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit</PageTitle>
+
+<h1>Edit</h1>
+
+<h2>SolvencyAudit</h2>
+<hr />
+@if (SolvencyAudit is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm method="post" Model="SolvencyAudit" OnValidSubmit="UpdateSolvencyAudit" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert"/>
+                <input type="hidden" name="SolvencyAudit.Id" value="@SolvencyAudit.Id" />
+                <div class="mb-3">
+                    <label for="timestamp" class="form-label">Timestamp:</label>
+                    <InputDate id="timestamp" @bind-Value="SolvencyAudit.Timestamp" class="form-control" />
+                    <ValidationMessage For="() => SolvencyAudit.Timestamp" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="totalliabilities" class="form-label">TotalLiabilities:</label>
+                    <InputNumber id="totalliabilities" @bind-Value="SolvencyAudit.TotalLiabilities" class="form-control" />
+                    <ValidationMessage For="() => SolvencyAudit.TotalLiabilities" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="totalassets" class="form-label">TotalAssets:</label>
+                    <InputNumber id="totalassets" @bind-Value="SolvencyAudit.TotalAssets" class="form-control" />
+                    <ValidationMessage For="() => SolvencyAudit.TotalAssets" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="merkleroot" class="form-label">MerkleRoot (base64):</label>
+                    <InputText id="merkleroot" @bind-Value="MerkleRootBase64" class="form-control" />
+                    <ValidationMessage For="() => MerkleRootBase64" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="commitmentcv" class="form-label">CommitmentCv (base64):</label>
+                    <InputText id="commitmentcv" @bind-Value="CommitmentCvBase64" class="form-control" />
+                    <ValidationMessage For="() => CommitmentCvBase64" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="commitmentct" class="form-label">CommitmentCt (base64):</label>
+                    <InputText id="commitmentct" @bind-Value="CommitmentCtBase64" class="form-control" />
+                    <ValidationMessage For="() => CommitmentCtBase64" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="commitmentcdelta" class="form-label">CommitmentCDelta (base64):</label>
+                    <InputText id="commitmentcdelta" @bind-Value="CommitmentCDeltaBase64" class="form-control" />
+                    <ValidationMessage For="() => CommitmentCDeltaBase64" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="zkproof" class="form-label">ZkProof (base64):</label>
+                    <InputText id="zkproof" @bind-Value="ZkProofBase64" class="form-control" />
+                    <ValidationMessage For="() => ZkProofBase64" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="status" class="form-label">Status:</label>
+                    <InputSelect id="status" @bind-Value="SolvencyAudit.Status" class="form-control">
+                        @foreach (var s in Enum.GetValues<AuditStatus>())
+                        {
+                            <option value="@s">@s.ToString()</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => SolvencyAudit.Status" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="secret" class="form-label">Secret (read-only):</label>
+                    <InputText id="secret" @bind-Value="SecretDisplay" class="form-control" />
+                    <ValidationMessage For="() => SecretDisplay" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/solvencyaudits">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private System.Guid Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private SolvencyAudit? SolvencyAudit { get; set; }
+
+    // string-backed properties for byte[] fields
+    private string MerkleRootBase64 { get; set; } = string.Empty;
+    private string CommitmentCvBase64 { get; set; } = string.Empty;
+    private string CommitmentCtBase64 { get; set; } = string.Empty;
+    private string CommitmentCDeltaBase64 { get; set; } = string.Empty;
+    private string ZkProofBase64 { get; set; } = string.Empty;
+    private string SecretDisplay { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        SolvencyAudit ??= await context.SolvencyAudit.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (SolvencyAudit is null)
+        {
+            NavigationManager.NotFound();
+            return;
+        }
+
+        // initialize base64 string fields from byte[] so they can be edited as strings
+        if (SolvencyAudit.MerkleRoot is not null && SolvencyAudit.MerkleRoot.Length > 0)
+            MerkleRootBase64 = Convert.ToBase64String(SolvencyAudit.MerkleRoot);
+
+        if (SolvencyAudit.CommitmentCv is not null && SolvencyAudit.CommitmentCv.Length > 0)
+            CommitmentCvBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCv);
+
+        if (SolvencyAudit.CommitmentCt is not null && SolvencyAudit.CommitmentCt.Length > 0)
+            CommitmentCtBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCt);
+
+        if (SolvencyAudit.CommitmentCDelta is not null && SolvencyAudit.CommitmentCDelta.Length > 0)
+            CommitmentCDeltaBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCDelta);
+
+        if (SolvencyAudit.ZkProof is not null && SolvencyAudit.ZkProof.Length > 0)
+            ZkProofBase64 = Convert.ToBase64String(SolvencyAudit.ZkProof);
+
+        // display secret as text (read-only editable string); do not attempt to bind complex object directly
+        SecretDisplay = SolvencyAudit.Secret?.ToString() ?? string.Empty;
+    }
+
+    private async Task UpdateSolvencyAudit()
+    {
+        // convert base64 strings back to byte[] before saving
+        if (!string.IsNullOrWhiteSpace(MerkleRootBase64))
+            SolvencyAudit!.MerkleRoot = Convert.FromBase64String(MerkleRootBase64);
+        else
+            SolvencyAudit!.MerkleRoot = Array.Empty<byte>();
+
+        if (!string.IsNullOrWhiteSpace(CommitmentCvBase64))
+            SolvencyAudit.CommitmentCv = Convert.FromBase64String(CommitmentCvBase64);
+        else
+            SolvencyAudit.CommitmentCv = Array.Empty<byte>();
+
+        if (!string.IsNullOrWhiteSpace(CommitmentCtBase64))
+            SolvencyAudit.CommitmentCt = Convert.FromBase64String(CommitmentCtBase64);
+        else
+            SolvencyAudit.CommitmentCt = Array.Empty<byte>();
+
+        if (!string.IsNullOrWhiteSpace(CommitmentCDeltaBase64))
+            SolvencyAudit.CommitmentCDelta = Convert.FromBase64String(CommitmentCDeltaBase64);
+        else
+            SolvencyAudit.CommitmentCDelta = Array.Empty<byte>();
+
+        if (!string.IsNullOrWhiteSpace(ZkProofBase64))
+            SolvencyAudit.ZkProof = Convert.FromBase64String(ZkProofBase64);
+        else
+            SolvencyAudit.ZkProof = Array.Empty<byte>();
+
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(SolvencyAudit!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!SolvencyAuditExists(SolvencyAudit!.Id))
+            {
+                NavigationManager.NotFound();
+                return;
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/solvencyaudits");
+    }
+
+    private bool SolvencyAuditExists(System.Guid id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.SolvencyAudit.Any(e => e.Id == id);
+    }
+}

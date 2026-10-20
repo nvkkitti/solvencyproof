@@ -1,0 +1,38 @@
+@page "/accounts"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@implements IAsyncDisposable
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Index</PageTitle>
+
+<h1>Index</h1>
+
+<p>
+    <a href="accounts/create">Create New</a>
+</p>
+
+<QuickGrid Class="table" Items="context.Account">
+    <PropertyColumn Property="account => account.Balance" />
+    <TemplateColumn Context="account">@((account.MerkleLeafSalt == null || account.MerkleLeafSalt.Length == 0) ? string.Empty : Convert.ToBase64String(account.MerkleLeafSalt))</TemplateColumn>
+    <PropertyColumn Property="account => account.LastUpdate" />
+
+    <TemplateColumn Context="account">
+        <a href="@($"accounts/edit?id={account.Id}")">Edit</a> |
+        <a href="@($"accounts/details?id={account.Id}")">Details</a> |
+        <a href="@($"accounts/delete?id={account.Id}")">Delete</a>
+    </TemplateColumn>
+</QuickGrid>
+
+@code {
+    private SolvencyProofContext context = default!;
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

@@ -1,0 +1,45 @@
+@page "/solvencyaudits"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@implements IAsyncDisposable
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Index</PageTitle>
+
+<h1>Index</h1>
+
+<p>
+    <a href="solvencyaudits/create">Create New</a>
+</p>
+
+<QuickGrid Class="table" Items="context.SolvencyAudit">
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.Timestamp" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.TotalLiabilities" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.TotalAssets" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.MerkleRoot" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.CommitmentCv" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.CommitmentCt" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.CommitmentCDelta" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.ZkProof" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.Status" />
+    <PropertyColumn Property="solvencyaudit => solvencyaudit.Secret" />
+
+    <TemplateColumn Context="solvencyaudit">
+        <a href="@($"solvencyaudits/edit?id={solvencyaudit.Id}")">Edit</a> |
+        <a href="@($"solvencyaudits/details?id={solvencyaudit.Id}")">Details</a> |
+        <a href="@($"solvencyaudits/delete?id={solvencyaudit.Id}")">Delete</a>
+    </TemplateColumn>
+</QuickGrid>
+
+@code {
+    private SolvencyProofContext context = default!;
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

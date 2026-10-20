@@ -1,0 +1,50 @@
+@page "/accounts/details"
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Details</PageTitle>
+
+<h1>Details</h1>
+
+<div>
+    <h2>Account</h2>
+    <hr />
+    @if (account is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Balance</dt>
+            <dd class="col-sm-10">@account.Balance</dd>
+            <dt class="col-sm-2">MerkleLeafSalt</dt>
+            <dd class="col-sm-10">@(account.MerkleLeafSalt == null || account.MerkleLeafSalt.Length == 0 ? string.Empty : Convert.ToBase64String(account.MerkleLeafSalt))</dd>
+            <dt class="col-sm-2">LastUpdate</dt>
+            <dd class="col-sm-10">@account.LastUpdate</dd>
+        </dl>
+        <div>
+            <a href="@($"/accounts/edit?id={account.Id}")">Edit</a> |
+            <a href="@($"/accounts")">Back to List</a>
+        </div>
+    }
+</div>
+
+@code {
+    private Account? account;
+
+    [SupplyParameterFromQuery]
+    private System.Guid Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        account = await context.Account.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (account is null)
+        {
+            NavigationManager.NotFound();
+        }
+    }
+}

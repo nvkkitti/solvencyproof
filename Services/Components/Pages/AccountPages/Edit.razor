@@ -1,0 +1,109 @@
+@page "/accounts/edit"
+@using System
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit</PageTitle>
+
+<h1>Edit</h1>
+
+<h2>Account</h2>
+<hr />
+@if (Account is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm method="post" Model="Account" OnValidSubmit="UpdateAccount" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert"/>
+                <input type="hidden" name="Account.Id" value="@Account.Id" />
+                <div class="mb-3">
+                    <label for="balance" class="form-label">Balance:</label>
+                    <InputNumber id="balance" @bind-Value="Account.Balance" class="form-control" />
+                    <ValidationMessage For="() => Account.Balance" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Merkle Leaf Salt (Base64):</label>
+                    <InputText id="merkleleafsalt" class="form-control" @bind-Value="MerkleLeafSaltString" readonly />
+                    <ValidationMessage For="() => MerkleLeafSaltString" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="lastupdate" class="form-label">LastUpdate:</label>
+                    <InputDate id="lastupdate" @bind-Value="Account.LastUpdate" class="form-control" />
+                    <ValidationMessage For="() => Account.LastUpdate" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/accounts">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private Guid Id { get; set; }
+
+    private Account? Account { get; set; }
+
+    private string MerkleLeafSaltString { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        Account ??= await context.Account.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (Account is null)
+        {
+            NavigationManager.NotFound();
+            return;
+        }
+
+        MerkleLeafSaltString = (Account.MerkleLeafSalt == null || Account.MerkleLeafSalt.Length == 0)
+            ? string.Empty
+            : Convert.ToBase64String(Account.MerkleLeafSalt);
+    }
+
+    private async Task UpdateAccount()
+    {
+        // Convert back from Base64 string to byte[]; use empty array when blank
+        Account!.MerkleLeafSalt = string.IsNullOrWhiteSpace(MerkleLeafSaltString)
+            ? Array.Empty<byte>()
+            : Convert.FromBase64String(MerkleLeafSaltString);
+
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(Account).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!AccountExists(Account!.Id))
+            {
+                NavigationManager.NotFound();
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/accounts");
+    }
+
+    private bool AccountExists(Guid id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.Account.Any(e => e.Id == id);
+    }
+}
