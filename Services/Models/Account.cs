@@ -13,5 +13,6 @@ namespace SolvencyProof.Models
 
         public DateTime LastUpdate { get; set; } // Last update timestamp (Utolsó frissítés)
 
+        // HELLO THERE
     }
 }
