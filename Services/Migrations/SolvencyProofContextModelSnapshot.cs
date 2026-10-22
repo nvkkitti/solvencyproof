@@ -40,6 +40,29 @@ namespace SolvencyProof.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Account");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("d3b07384-d113-4f9a-ba00-a5fb9d72de45"),
+                            Balance = 1500.50m,
+                            LastUpdate = new DateTime(2026, 10, 20, 10, 0, 0, 0, DateTimeKind.Unspecified),
+                            MerkleLeafSalt = new byte[] { 26, 43, 60, 77, 94 }
+                        },
+                        new
+                        {
+                            Id = new Guid("f9a2e34b-7489-4e5a-8b1a-9c0d1e2f3a4b"),
+                            Balance = 250000.00m,
+                            LastUpdate = new DateTime(2026, 10, 19, 14, 30, 0, 0, DateTimeKind.Unspecified),
+                            MerkleLeafSalt = new byte[] { 255, 238, 221, 204, 187 }
+                        },
+                        new
+                        {
+                            Id = new Guid("a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"),
+                            Balance = 0.00m,
+                            LastUpdate = new DateTime(2026, 10, 18, 9, 15, 0, 0, DateTimeKind.Unspecified),
+                            MerkleLeafSalt = new byte[] { 1, 2, 3, 4, 5 }
+                        });
                 });
 
             modelBuilder.Entity("SolvencyProof.Models.CryptographicSecret", b =>
@@ -50,7 +73,8 @@ namespace SolvencyProof.Migrations
 
                     b.Property<byte[]>("BlindingFactorR")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
 
                     b.Property<Guid>("SolvencyAuditId")
                         .HasColumnType("uniqueidentifier");
@@ -60,7 +84,7 @@ namespace SolvencyProof.Migrations
                     b.HasIndex("SolvencyAuditId")
                         .IsUnique();
 
-                    b.ToTable("CryptographicSecret");
+                    b.ToTable("CryptographicSecrets");
                 });
 
             modelBuilder.Entity("SolvencyProof.Models.SolvencyAudit", b =>
@@ -83,7 +107,8 @@ namespace SolvencyProof.Migrations
 
                     b.Property<byte[]>("MerkleRoot")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");

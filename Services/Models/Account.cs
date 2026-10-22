@@ -9,7 +9,7 @@ namespace SolvencyProof.Models
 
         public decimal Balance { get; set; } // Account balance (Egyenleg)
 
-        public byte[] MerkleLeafSalt { get; set; } = new byte[0];
+        public byte[] MerkleLeafSalt { get; set; } = Array.Empty<byte>(); // Salt for Merkle leaf (Merkle levél só)
 
         public DateTime LastUpdate { get; set; } // Last update timestamp (Utolsó frissítés)
 

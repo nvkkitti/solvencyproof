@@ -14,6 +14,10 @@
     <a href="solvencyaudits/create">Create New</a>
 </p>
 
+<form method="post" action="/api/audit/generate" class="mb-3">
+    <button type="submit" class="btn btn-primary">Audit generálása</button>
+</form>
+
 <QuickGrid Class="table" Items="context.SolvencyAudit">
     <PropertyColumn Property="solvencyaudit => solvencyaudit.Timestamp" />
     <PropertyColumn Property="solvencyaudit => solvencyaudit.TotalLiabilities" />

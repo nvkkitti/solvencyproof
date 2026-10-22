@@ -1,15 +1,14 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-public class ProofOfSolvencyDbContextFactory : IDesignTimeDbContextFactory<ProofOfSolvencyDbContext>
+public class SolvencyProofContextFactory : IDesignTimeDbContextFactory<SolvencyProofContext>
 {
-    public ProofOfSolvencyDbContext CreateDbContext(string[] args)
+    public SolvencyProofContext CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<ProofOfSolvencyDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<SolvencyProofContext>();
 
-        // Ez a string megegyezik azzal, amit az appsettings.json-be is írtál
         optionsBuilder.UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=ProofOfSolvencyDb;Trusted_Connection=True;MultipleActiveResultSets=true");
 
-        return new ProofOfSolvencyDbContext(optionsBuilder.Options);
+        return new SolvencyProofContext(optionsBuilder.Options);
     }
 }

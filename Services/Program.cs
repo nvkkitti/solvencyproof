@@ -1,36 +1,110 @@
 using SolvencyProof.Components;
 using Microsoft.EntityFrameworkCore;
+using SolvencyProof.Models;
+using SolvencyProof.Services;
 
-var builder = WebApplication.CreateBuilder(args);
-var connectionString = builder.Configuration.GetConnectionString("SolvencyProofContext") ?? throw new InvalidOperationException("Connection string 'SolvencyProofContext' not found.");
-
-builder.Services.AddDbContextFactory<SolvencyProofContext>(options => options.UseSqlServer(connectionString));
-
-builder.Services.AddQuickGridEntityFrameworkAdapter();
-
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+public partial class Program
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
-    app.UseMigrationsEndPoint();
+    private static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+        var connectionString = builder.Configuration.GetConnectionString("SolvencyProofContext") ?? throw new InvalidOperationException("Connection string 'SolvencyProofContext' not found.");
+
+        builder.Services.AddDbContextFactory<SolvencyProofContext>(options => options.UseSqlServer(connectionString));
+        builder.Services.AddScoped<IAuditProverService, AuditProverService>();
+
+        builder.Services.AddQuickGridEntityFrameworkAdapter();
+
+        builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+        // Add services to the container.
+        builder.Services.AddRazorComponents()
+            .AddInteractiveServerComponents();
+
+        var app = builder.Build();
+
+        // Apply the migrations belonging to SolvencyProofContext to the configured database.
+        using (var scope = app.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<SolvencyProofContext>();
+            dbContext.Database.Migrate();
+        }
+
+        // Configure the HTTP request pipeline.
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseExceptionHandler("/Error", createScopeForErrors: true);
+            // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+            app.UseHsts();
+            app.UseMigrationsEndPoint();
+        }
+        app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+        app.UseHttpsRedirection();
+
+        app.UseAntiforgery();
+
+        app.MapStaticAssets();
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode();
+
+        app.MapPost("/api/audit/generate", async (SolvencyProofContext db, IAuditProverService proverService) =>
+        {
+            var audit = new SolvencyAudit
+            {
+                Id = Guid.NewGuid(),
+                Timestamp = DateTime.UtcNow,
+                Status = AuditStatus.Prepared
+            };
+            db.SolvencyAudit.Add(audit);
+            await db.SaveChangesAsync();
+
+            // A generálás átadása a háttérszolgáltatásnak
+            _ = proverService.GenerateProofAsync(audit.Id);
+
+            return Results.Accepted($"/api/audit/status/{audit.Id}");
+        });
+
+        // GET: /api/audit/status/{id}
+        app.MapGet("/api/audit/status/{id:guid}", async (Guid id, SolvencyProofContext db) =>
+        {
+            // Lekérdezzük az Audit rekordot (a CryptographicSecrets NÉLKÜL)
+            var audit = await db.SolvencyAudit.FindAsync(id);
+
+            if (audit == null)
+            {
+                return Results.NotFound(new { Error = "A kért audit nem található." });
+            }
+
+            // Ha az audit még folyamatban van (Pending vagy GeneratingProof)
+            if (audit.Status != AuditStatus.VerifiedOnChain)
+            {
+                return Results.Ok(new
+                {
+                    Id = audit.Id,
+                    Status = audit.Status.ToString(),
+                    Timestamp = audit.Timestamp,
+                    Message = "Az audit feldolgozása folyamatban van. Kérlek, próbáld újra később."
+                });
+            }
+
+            // Ha az audit sikeresen befejeződött, visszaadjuk a teljes publikus bizonyítékot
+            return Results.Ok(new
+            {
+                Id = audit.Id,
+                Status = audit.Status.ToString(),
+                Timestamp = audit.Timestamp,
+                TotalLiabilities = audit.TotalLiabilities,
+                TotalAssets = audit.TotalAssets,
+
+                // Kriptográfiai bájttömbök konvertálása Hexadecimális stringgé
+                MerkleRoot = Convert.ToHexString(audit.MerkleRoot).ToLower(),
+                CommitmentCv = Convert.ToHexString(audit.CommitmentCv).ToLower(),
+                CommitmentCt = Convert.ToHexString(audit.CommitmentCt).ToLower(),
+                CommitmentCDelta = Convert.ToHexString(audit.CommitmentCDelta).ToLower(),
+                ZkProof = Convert.ToHexString(audit.ZkProof).ToLower()
+            });
+        });
+
+        app.Run();
+    }
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
-
-app.UseAntiforgery();
-
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.Run();
