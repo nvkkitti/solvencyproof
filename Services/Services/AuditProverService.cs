@@ -1,12 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
 using SolvencyProof.Helpers;
 using SolvencyProof.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 
 namespace SolvencyProof.Services
@@ -15,12 +15,17 @@ namespace SolvencyProof.Services
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AuditProverService> _logger;
+        private readonly IDataProtector _blindingFactorProtector;
 
 
-        public AuditProverService(IServiceScopeFactory scopeFactory, ILogger<AuditProverService> logger)
+        public AuditProverService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<AuditProverService> logger,
+            IDataProtectionProvider dataProtectionProvider)
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
+            _blindingFactorProtector = dataProtectionProvider.CreateProtector("SolvencyProof.Audit.BlindingFactor.v1");
         }
         public async Task GenerateProofAsync(Guid auditId)
         {
@@ -33,38 +38,53 @@ namespace SolvencyProof.Services
                 return;
             }
 
+            List<Account> accounts = await db.Account
+                .AsNoTracking()
+                .OrderBy(account => account.Id)
+                .ToListAsync();
+
+            if (accounts.Count == 0)
+            {
+                audit.Status = AuditStatus.Failed;
+                await db.SaveChangesAsync();
+                return;
+            }
+
             audit.Status = AuditStatus.Proving;
+            audit.TotalAssets = accounts.Sum(account => account.Balance);
+            audit.MerkleRoot = MerkleTreeBuilder.BuildTreeAndGetRoot(accounts);
             await db.SaveChangesAsync();
 
-            // Az összegeket (decimal) át kell váltani a legkisebb oszthatatlan egységre (pl. egész számra).
-            // Tegyük fel, hogy az értékünk 8 tizedesjegyet használ
-            long totalLiabilitiesSats = (long)(audit.TotalLiabilities * 100_000_000m);
-            long totalAssetsSats = (long)(audit.TotalAssets * 100_000_000m);
+            // Convert the amounts (decimal) to the smallest indivisible unit (for example, an integer) (Az összegeket (decimal) át kell váltani a legkisebb oszthatatlan egységre (pl. egész számra)).
+            // Assume that our value uses 8 decimal places (Tegyük fel, hogy az értékünk 8 tizedesjegyet használ)
+            long totalLiabilitiesInSmallestUnit = (long)(audit.TotalLiabilities * 100_000_000m);
+            long totalAssetsInSmallestUnit = checked((long)(audit.TotalAssets * 100_000_000m));
 
-            // 1. Kötelezettségek (C_T)
-            byte[] cT = PedersenHelper.CommitDeterministic(totalLiabilitiesSats);
+            // 1. Liabilities (C_T) (Kötelezettségek (C_T))
+            byte[] liabilityCommitment = PedersenHelper.CommitDeterministic(totalLiabilitiesInSmallestUnit);
 
-            // 2. Fedezet (C_v) a generált vakító tényezővel (r)
+            // 2. Assets (C_v) with the generated blinding factor (r) (Fedezet (C_v) a generált vakító tényezővel (r))
             byte[] blindingFactor = CryptoHelper.GenerateRandomBytes(32);
-            byte[] cV = PedersenHelper.Commit(totalAssetsSats, blindingFactor);
+            byte[] assetCommitment = PedersenHelper.Commit(totalAssetsInSmallestUnit, blindingFactor);
 
-            // 3. Különbség homomorf kivonással (C_Delta)
-            byte[] cDelta = PedersenHelper.SubtractCommitments(cV, cT);
+            // 3. Difference using homomorphic subtraction (C_Delta) (Különbség homomorf kivonással (C_Delta))
+            byte[] differenceCommitment = PedersenHelper.SubtractCommitments(assetCommitment, liabilityCommitment);
 
-            // (Dummy ZK proof marad egyelőre)
+            // The dummy ZK proof remains for now (Dummy ZK proof marad egyelőre)
             byte[] zkProof = CryptoHelper.GenerateRandomBytes(256);
 
-            audit.CommitmentCt = cT;
-            audit.CommitmentCv = cV;
-            audit.CommitmentCDelta = cDelta;
+            audit.CommitmentCt = liabilityCommitment;
+            audit.CommitmentCv = assetCommitment;
+            audit.CommitmentCDelta = differenceCommitment;
             audit.ZkProof = zkProof;
+            db.CryptographicSecrets.Add(new CryptographicSecret
+            {
+                Id = Guid.NewGuid(),
+                SolvencyAuditId = audit.Id,
+                BlindingFactorR = _blindingFactorProtector.Protect(blindingFactor)
+            });
             audit.Status = AuditStatus.VerifiedOnChain;
             await db.SaveChangesAsync();
-        }
-
-        private static byte[] GenerateRandomBytes(int length)
-        {
-            return RandomNumberGenerator.GetBytes(length);
         }
     }
 }

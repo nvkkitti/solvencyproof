@@ -12,6 +12,8 @@ public partial class Program
 
         builder.Services.AddDbContextFactory<SolvencyProofContext>(options => options.UseSqlServer(connectionString));
         builder.Services.AddScoped<IAuditProverService, AuditProverService>();
+        builder.Services.AddDataProtection();
+        builder.Services.AddHttpClient();
 
         builder.Services.AddQuickGridEntityFrameworkAdapter();
 
@@ -58,7 +60,7 @@ public partial class Program
             db.SolvencyAudit.Add(audit);
             await db.SaveChangesAsync();
 
-            // A generálás átadása a háttérszolgáltatásnak
+            // Delegate generation to the background service (A generálás átadása a háttérszolgáltatásnak)
             _ = proverService.GenerateProofAsync(audit.Id);
 
             return Results.Accepted($"/api/audit/status/{audit.Id}");
@@ -67,7 +69,7 @@ public partial class Program
         // GET: /api/audit/status/{id}
         app.MapGet("/api/audit/status/{id:guid}", async (Guid id, SolvencyProofContext db) =>
         {
-            // Lekérdezzük az Audit rekordot (a CryptographicSecrets NÉLKÜL)
+            // Retrieve the audit record (Lekérdezzük az Audit rekordot (a CryptographicSecrets NÉLKÜL))
             var audit = await db.SolvencyAudit.FindAsync(id);
 
             if (audit == null)
@@ -75,7 +77,7 @@ public partial class Program
                 return Results.NotFound(new { Error = "A kért audit nem található." });
             }
 
-            // Ha az audit még folyamatban van (Pending vagy GeneratingProof)
+            // If the audit is still in progress (Ha az audit még folyamatban van (Pending vagy GeneratingProof))
             if (audit.Status != AuditStatus.VerifiedOnChain)
             {
                 return Results.Ok(new
@@ -87,7 +89,7 @@ public partial class Program
                 });
             }
 
-            // Ha az audit sikeresen befejeződött, visszaadjuk a teljes publikus bizonyítékot
+            // If the audit completed successfully, return the complete public proof (Ha az audit sikeresen befejeződött, visszaadjuk a teljes publikus bizonyítékot)
             return Results.Ok(new
             {
                 Id = audit.Id,
@@ -96,7 +98,7 @@ public partial class Program
                 TotalLiabilities = audit.TotalLiabilities,
                 TotalAssets = audit.TotalAssets,
 
-                // Kriptográfiai bájttömbök konvertálása Hexadecimális stringgé
+                // Convert cryptographic byte arrays to hexadecimal strings (Kriptográfiai bájttömbök konvertálása Hexadecimális stringgé)
                 MerkleRoot = Convert.ToHexString(audit.MerkleRoot).ToLower(),
                 CommitmentCv = Convert.ToHexString(audit.CommitmentCv).ToLower(),
                 CommitmentCt = Convert.ToHexString(audit.CommitmentCt).ToLower(),

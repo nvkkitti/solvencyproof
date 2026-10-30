@@ -73,8 +73,7 @@ namespace SolvencyProof.Migrations
 
                     b.Property<byte[]>("BlindingFactorR")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("varbinary(32)");
+                        .HasColumnType("varbinary(max)");
 
                     b.Property<Guid>("SolvencyAuditId")
                         .HasColumnType("uniqueidentifier");

@@ -21,7 +21,7 @@ namespace SolvencyProof.Models
 
         public decimal TotalAssets { get; set; } // v (Rendelkezésre álló fedezet)
 
-        //Kriptogáriai elkötelezettségek és STARK adatok
+        // Cryptographic commitments and STARK data (Kriptogáriai elkötelezettségek és STARK adatok)
         [MaxLength(32)] // Limit byte array length to 32 bytes (32 bájtos korlátozás)
         public byte[] MerkleRoot { get; set; } = Array.Empty<byte>();
         public byte[] CommitmentCv { get; set; } = Array.Empty<byte>();
@@ -31,7 +31,7 @@ namespace SolvencyProof.Models
 
         public AuditStatus Status { get; set; } // Audit status (Audit állapota)
 
-        //Navigációs tulajdonság a kriptográfiai titok felé (1:1 kapcsolat)
-        public CryptographicSecret Secret { get; set; }
+        // Navigation property to the cryptographic secret (Navigációs tulajdonság a kriptográfiai titok felé (1:1 kapcsolat))
+        [Required] public CryptographicSecret Secret { get; set; } = null!;
     }
 }

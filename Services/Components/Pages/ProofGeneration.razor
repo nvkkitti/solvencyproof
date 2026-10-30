@@ -1,6 +1,7 @@
 ﻿@page "/proof-generation"
-@using SolvencyProof.Services
-@inject IAuditProverService AuditProverService
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager NavigationManager
 
 <h3>Proof of Solvency - Bizonyítás generálása</h3>
 
@@ -25,29 +26,44 @@
     </div>
 }
 
+@if (_errorMessage != null)
+{
+    <div class="alert alert-danger mt-2">@_errorMessage</div>
+}
+
 @code 
 {
     private bool _isProcessing = false;
     private string? _proofResult;
-    private DateTime? _generationTime;
+    private string? _errorMessage;
 
     private async Task GenerateProofAsync()
     {
         _isProcessing = true;
         _proofResult = null;
-        _generationTime = null;
+        _errorMessage = null;
         StateHasChanged();
+
         try
         {
-            //A háttérfolyamat szimulációja (EF Core lekérdezés + Rust zkVM hívás)
-            await Task.Delay(3000);
-            _proofResult = "0x8f4a...2b9c";
-            _generationTime = DateTime.Now;
+            HttpClient client = HttpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(NavigationManager.BaseUri);
+
+            using HttpResponseMessage response = await client.PostAsync("api/audit/generate", content: null);
+            response.EnsureSuccessStatusCode();
+
+            AuditGenerationResponse? result = await response.Content.ReadFromJsonAsync<AuditGenerationResponse>();
+            if (result is null)
+            {
+                throw new InvalidOperationException("A REST API üres választ adott.");
+            }
+
+            _proofResult = $"0x{result.MerkleRoot}";
         }
         catch (Exception ex)
         {
-            // Handle exceptions (e.g., log the error, show a message to the user)
             Console.Error.WriteLine($"Hiba: {ex.Message}");
+            _errorMessage = "A bizonyítás generálása sikertelen. Kérjük, próbálja újra később.";
         }
         finally
         {
@@ -55,4 +71,6 @@
             StateHasChanged();
         }
     }
+
+    private sealed record AuditGenerationResponse(Guid Id, string Status, DateTime Timestamp, decimal TotalAssets, string MerkleRoot);
 }

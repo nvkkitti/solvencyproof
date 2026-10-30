@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
 public class SolvencyProofContextFactory : IDesignTimeDbContextFactory<SolvencyProofContext>
