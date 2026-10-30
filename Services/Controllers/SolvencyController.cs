@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-// Állítsd be a saját namespace-edet a projekt nevének megfelelően
 namespace SolvencyProof.Controllers; 
 
 [ApiController]

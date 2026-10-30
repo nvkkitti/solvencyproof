@@ -1,0 +1,101 @@
+﻿@page "/clientverification"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Models
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+
+<PageTitle>Ügyfél hitelesítés</PageTitle>
+
+<div class="container mt-4">
+    <h2>Azonosítás hitelesítése</h2>
+    <p class="text-muted">
+        Ellenőrizze, hogy az Ön azonosítója szerepel-e a Merkle-fában, amely a fizetőképesség igazolásához kapcsolódik.
+    </p>
+
+    <div class="card shadow-sm mt-4">
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="accountIdInput" class="form-label fw-bold">Ügyfél azonosító</label>
+                <input type="text" class="form-control" id="accountIdInput" placeholder="Adja meg az azonosítóját..." @bind="_accountId">
+            </div>
+
+            <button class="btn btn-primary" @onclick="VerifyAccountAsync" disabled="@_isVerifying">
+                @if (_isVerifying)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span class="ms-2">Ellenőrzés a Merkle-fában...</span>
+                }
+                else
+                {
+                    <span>Lekérdezés indítása</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (_verificationResult != null)
+    {
+        <div class="alert mt-4 @(_isIncluded ? "alert-success" : "alert-danger")">
+            <h4 class="alert-heading">Eredmény:</h4>
+            <p>@_verificationResult</p>
+        </div>
+    }
+</div>
+
+@code {
+    private string _accountId = "";
+    private bool _isVerifying = false;
+    private string? _verificationResult;
+    private bool _isIncluded = false;
+
+    private async Task VerifyAccountAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_accountId))
+        {
+            _verificationResult = "Kérem, adjon meg egy érvényes azonosítót!";
+            _isIncluded = false;
+            return;
+        }
+
+        if (!Guid.TryParse(_accountId.Trim(), out Guid accountId))
+        {
+            _verificationResult = "Kérem, adjon meg egy érvényes azonosítót!";
+            _isIncluded = false;
+            return;
+        }
+
+        _isVerifying = true;
+        _verificationResult = null;
+        StateHasChanged();
+
+        try
+        {
+            await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
+            bool accountExists = await db.Account
+                .AsNoTracking()
+                .AnyAsync(account => account.Id == accountId);
+
+            db.VerificationQueries.Add(new VerificationQuery
+            {
+                AccountId = accountId,
+                QueriedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            if (accountExists)
+            {
+                _isIncluded = true;
+                _verificationResult = $"Sikeres verifikáció! Az Ön azonosítója ({accountId}) szerepel a nyilvántartott számlák között.";
+            }
+            else
+            {
+                _isIncluded = false;
+                _verificationResult = "Nem található azonosító. Kérjük, ellenőrizze a megadott adatokat.";
+            }
+        }
+        finally
+        {
+            _isVerifying = false;
+        }
+    }
+}

@@ -7,6 +7,7 @@ public class SolvencyProofContext(DbContextOptions<SolvencyProofContext> options
     // DbSet for SolvencyAudit matches usage in the Razor page (context.SolvencyAudit)
     public DbSet<SolvencyAudit> SolvencyAudit { get; set; } = default!;
     public DbSet<CryptographicSecret> CryptographicSecrets { get; set; } = default!;
+    public DbSet<VerificationQuery> VerificationQueries { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

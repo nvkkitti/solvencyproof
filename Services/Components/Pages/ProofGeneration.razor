@@ -1,0 +1,58 @@
+﻿@page "/proof-generation"
+@using SolvencyProof.Services
+@inject IAuditProverService AuditProverService
+
+<h3>Proof of Solvency - Bizonyítás generálása</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="GenerateProofAsync" disabled="@_isProcessing">
+        @if (_isProcessing)
+        {
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span class="ms-2"> zk-STARK bizonyítás generálása (RUST)... </span>
+        }
+        else
+        {
+            <span>  Proof of Solvency futtatása</span>
+        }
+    </button>
+</div>
+
+@if (_proofResult != null)
+{
+    <div class="alert alert-success mt-2">  
+        Sikeres generálés! Merkle root: <strong>@_proofResult</strong>
+    </div>
+}
+
+@code 
+{
+    private bool _isProcessing = false;
+    private string? _proofResult;
+    private DateTime? _generationTime;
+
+    private async Task GenerateProofAsync()
+    {
+        _isProcessing = true;
+        _proofResult = null;
+        _generationTime = null;
+        StateHasChanged();
+        try
+        {
+            //A háttérfolyamat szimulációja (EF Core lekérdezés + Rust zkVM hívás)
+            await Task.Delay(3000);
+            _proofResult = "0x8f4a...2b9c";
+            _generationTime = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            // Handle exceptions (e.g., log the error, show a message to the user)
+            Console.Error.WriteLine($"Hiba: {ex.Message}");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+}

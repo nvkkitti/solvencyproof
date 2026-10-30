@@ -131,6 +131,25 @@ namespace SolvencyProof.Migrations
                     b.ToTable("SolvencyAudit");
                 });
 
+            modelBuilder.Entity("SolvencyProof.Models.VerificationQuery", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("QueriedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("VerificationQueries");
+                });
+
             modelBuilder.Entity("SolvencyProof.Models.CryptographicSecret", b =>
                 {
                     b.HasOne("SolvencyProof.Models.SolvencyAudit", "Audit")
