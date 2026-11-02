@@ -1,23 +1,38 @@
 ﻿@page "/proof-generation"
 @rendermode InteractiveServer
+@using SolvencyProof.Services
 @inject IHttpClientFactory HttpClientFactory
 @inject NavigationManager NavigationManager
+@inject ZkProofClient ZkClient
 
 <h3>Proof of Solvency - Bizonyítás generálása</h3>
 
-<div class="mb-3">
-    <button class="btn btn-primary" @onclick="GenerateProofAsync" disabled="@_isProcessing">
-        @if (_isProcessing)
+<button class="btn btn-primary" @onclick="GetProof">Bizonyíték kérése</button>
+
+@if (!string.IsNullOrEmpty(_result))
+{
+    <div class="alert alert-success mt-3">
+        @_result
+    </div>
+}
+
+@code {
+    private string _result = "";
+
+    private async Task GetProof()
+    {
+        try
         {
-            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            <span class="ms-2"> zk-STARK bizonyítás generálása (RUST)... </span>
+            _result = "Töltés..."; // Vizuális visszajelzés a felhasználónak
+            var response = await ZkClient.GenerateProofAsync("teszt_adat");
+            _result = $"Eredmény: {response?.ProofData} (Státusz: {response?.Status})";
         }
-        else
+        catch (HttpRequestException ex)
         {
-            <span>  Proof of Solvency futtatása</span>
+            _result = $"Hálózati hiba: {ex.Message}";
         }
-    </button>
-</div>
+    }
+}
 
 @if (_proofResult != null)
 {

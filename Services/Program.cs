@@ -23,6 +23,9 @@ public partial class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
+        builder.Services.AddHttpClient<ZkProofClient>();
+
+
         var app = builder.Build();
 
         // Apply the migrations belonging to SolvencyProofContext to the configured database.
