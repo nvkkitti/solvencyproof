@@ -24,8 +24,8 @@
         try
         {
             _result = "Töltés..."; // Vizuális visszajelzés a felhasználónak
-            var response = await ZkClient.GenerateProofAsync("teszt_adat");
-            _result = $"Eredmény: {response?.ProofData} (Státusz: {response?.Status})";
+            var response = await ZkClient.GenerateProofAsync("teszt_adat", 0, 0);
+            _result = $"Bizonyíték elemek: {string.Join(", ", response.ProofElements)}; Nyilvános bemenetek: {string.Join(", ", response.PublicInputs)}";
         }
         catch (HttpRequestException ex)
         {

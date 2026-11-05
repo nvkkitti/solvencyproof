@@ -8,6 +8,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SolvencyProof.Services.Blockchain;
+using Nethereum.Hex.HexConvertors.Extensions;
 
 namespace SolvencyProof.Services
 {
@@ -85,6 +87,39 @@ namespace SolvencyProof.Services
             });
             audit.Status = AuditStatus.VerifiedOnChain;
             await db.SaveChangesAsync();
+        }
+        
+        public class ProofOrchestratorService
+        {
+            private readonly HttpClient _rustAxumClient;
+            private readonly EthereumSubmitterService _ethereumSubmitter;
+
+            public ProofOrchestratorService(HttpClient rustAxumClient, EthereumSubmitterService ethereumSubmitter)
+            {
+                _rustAxumClient = rustAxumClient;
+                _ethereumSubmitter = ethereumSubmitter;
+            }
+            public async Task RunAuditAndSubmitAsync(string institutionId)
+            {
+                //Rust Axum service call to generate the proof (Rust Axum szolgáltatás hívása a bizonyíték generálásához)
+                var rustResponse = await _rustAxumClient.PostAsJsonAsync("/api/v1/generate-proof", new {id = institutionId});
+                var proofData = await rustResponse.Content.ReadFromJsonAsync<EvmProofResponse>();
+
+                //Type conversions for data coming from the Rust Axum service (Típuskonverziók a Rust Axum szolgáltatásból érkező adatokhoz)    
+                var proofElements = proofData.ProofElements
+                    .Select(Hex => Hex.HexToBigInteger(isHexLittleEndian : false))
+                    .ToArray();
+
+                var publicInputs = proofData.PublicInputs
+                    .Select(Hex => Hex.HexToBigInteger(isHexLittleEndian: false))
+                    .ToArray();
+
+                //Submit the proof to Ethereum (A bizonyíték benyújtása az Ethereumhoz)
+                byte[] idBytes = System.Text.Encoding.UTF8.GetBytes(institutionId);
+                string txHash = await _ethereumSubmitter.SubmitProofOnChainAsync(idBytes, proofElements, publicInputs);
+
+                Console.WriteLine($"Sikeres benyújtás! Tranzakciós hash: {txHash}");
+            }
         }
     }
 }

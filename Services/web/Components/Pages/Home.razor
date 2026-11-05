@@ -1,8 +1,6 @@
-﻿@page "/"
+@page "/"
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
-@using SolvencyProof.Services
-@inject ZkProofClient ZkClient
 
 <PageTitle>Fizetőképesség igazolása</PageTitle>
 
@@ -20,32 +18,7 @@
             <a href="/proof-generation" class="btn btn-primary btn-lg mt-3 shadow-sm">
                 Bizonyítás generálása
             </a>
-            <button class="btn btn-primary" @onclick="GetProof">Bizonyíték kérése</button>
 
-            @if (!string.IsNullOrEmpty(_result))
-            {
-                <div class="alert alert-success mt-3">
-                    @_result
-                </div>
-            }
-
-@code {
-    private string _result = "";
-
-    private async Task GetProof()
-    {
-        try
-        {
-            _result = "Töltés..."; // Vizuális visszajelzés a felhasználónak
-            var response = await ZkClient.GenerateProofAsync("teszt_adat");
-            _result = $"Eredmény: {response?.ProofData} (Státusz: {response?.Status})";
-        }
-        catch (HttpRequestException ex)
-        {
-            _result = $"Hálózati hiba: {ex.Message}";
-        }
-    }
-}
             <a href="/clientverification" class="btn btn-outline-secondary btn-lg mt-3 ms-2 shadow-sm">
                 Azonosító hitelesítése
             </a>
