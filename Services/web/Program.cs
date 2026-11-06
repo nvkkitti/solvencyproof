@@ -2,6 +2,7 @@ using SolvencyProof.Components;
 using Microsoft.EntityFrameworkCore;
 using SolvencyProof.Models;
 using SolvencyProof.Services;
+using SolvencyProof.Services.Blockchain;
 
 public partial class Program
 {
@@ -24,6 +25,9 @@ public partial class Program
             .AddInteractiveServerComponents();
 
         builder.Services.AddHttpClient<ZkProofClient>();
+        builder.Services.AddHttpClient<AuditProverService.ProofOrchestratorService>(client =>
+            client.BaseAddress = new Uri("http://127.0.0.1:3000/"));
+        builder.Services.AddTransient<HardhatProofSubmitterService>(sp => new HardhatProofSubmitterService(builder.Configuration));
 
 
         var app = builder.Build();
@@ -52,7 +56,13 @@ public partial class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        app.MapPost("/api/audit/generate", async (SolvencyProofContext db, IAuditProverService proverService) =>
+        app.MapPost(
+            "/api/audit/generate",
+            async (
+                SolvencyProofContext db,
+                IAuditProverService proverService,
+                ILogger<Program> logger,
+                AuditProverService.ProofOrchestratorService orchestrator) =>
         {
             var audit = new SolvencyAudit
             {
@@ -63,8 +73,33 @@ public partial class Program
             db.SolvencyAudit.Add(audit);
             await db.SaveChangesAsync();
 
-            // Delegate generation to the background service (A generálás átadása a háttérszolgáltatásnak)
-            _ = proverService.GenerateProofAsync(audit.Id);
+            try
+            {
+                await proverService.GenerateProofAsync(audit.Id);
+                await db.Entry(audit).ReloadAsync();
+
+                if (audit.Status == AuditStatus.Failed)
+                {
+                    return Results.Problem(
+                        "A bizonyíték generálásához legalább egy számla szükséges.",
+                        statusCode: StatusCodes.Status422UnprocessableEntity);
+                }
+
+                await orchestrator.RunAuditAndSubmitAsync(
+                    audit.Id.ToString(),
+                    audit.TotalAssets,
+                    audit.TotalLiabilities);
+
+                audit.Status = AuditStatus.VerifiedOnChain;
+                await db.SaveChangesAsync();
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "Audit {AuditId} failed before on-chain verification.", audit.Id);
+                audit.Status = AuditStatus.Failed;
+                await db.SaveChangesAsync();
+                throw;
+            }
 
             return Results.Accepted($"/api/audit/status/{audit.Id}");
         });

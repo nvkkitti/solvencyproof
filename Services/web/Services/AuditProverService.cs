@@ -7,9 +7,9 @@ using SolvencyProof.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using SolvencyProof.Services.Blockchain;
-using Nethereum.Hex.HexConvertors.Extensions;
 
 namespace SolvencyProof.Services
 {
@@ -85,40 +85,59 @@ namespace SolvencyProof.Services
                 SolvencyAuditId = audit.Id,
                 BlindingFactorR = _blindingFactorProtector.Protect(blindingFactor)
             });
-            audit.Status = AuditStatus.VerifiedOnChain;
             await db.SaveChangesAsync();
         }
         
         public class ProofOrchestratorService
         {
             private readonly HttpClient _rustAxumClient;
-            private readonly EthereumSubmitterService _ethereumSubmitter;
+            private readonly HardhatProofSubmitterService _proofSubmitter;
 
-            public ProofOrchestratorService(HttpClient rustAxumClient, EthereumSubmitterService ethereumSubmitter)
+            public ProofOrchestratorService(HttpClient rustAxumClient, HardhatProofSubmitterService proofSubmitter)
             {
                 _rustAxumClient = rustAxumClient;
-                _ethereumSubmitter = ethereumSubmitter;
+                _proofSubmitter = proofSubmitter;
             }
-            public async Task RunAuditAndSubmitAsync(string institutionId)
+            public async Task<string> RunAuditAndSubmitAsync(
+                string institutionId,
+                decimal totalAssets,
+                decimal totalLiabilities)
             {
-                //Rust Axum service call to generate the proof (Rust Axum szolgáltatás hívása a bizonyíték generálásához)
-                var rustResponse = await _rustAxumClient.PostAsJsonAsync("/api/v1/generate-proof", new {id = institutionId});
-                var proofData = await rustResponse.Content.ReadFromJsonAsync<EvmProofResponse>();
+                var rustResponse = await _rustAxumClient.PostAsJsonAsync(
+                    "/api/v1/generate-proof",
+                    new ProofRequest(
+                        institutionId,
+                        ToSmallestUnit(totalAssets),
+                        ToSmallestUnit(totalLiabilities)));
+                rustResponse.EnsureSuccessStatusCode();
+                var proofData = await rustResponse.Content.ReadFromJsonAsync<ProofResponse>()
+                    ?? throw new InvalidOperationException("The proof service returned an empty response.");
 
                 //Type conversions for data coming from the Rust Axum service (Típuskonverziók a Rust Axum szolgáltatásból érkező adatokhoz)    
                 var proofElements = proofData.ProofElements
-                    .Select(Hex => Hex.HexToBigInteger(isHexLittleEndian : false))
+                    .Select(ParseHexBigInteger)
                     .ToArray();
 
                 var publicInputs = proofData.PublicInputs
-                    .Select(Hex => Hex.HexToBigInteger(isHexLittleEndian: false))
+                    .Select(ParseHexBigInteger)
                     .ToArray();
 
-                //Submit the proof to Ethereum (A bizonyíték benyújtása az Ethereumhoz)
                 byte[] idBytes = System.Text.Encoding.UTF8.GetBytes(institutionId);
-                string txHash = await _ethereumSubmitter.SubmitProofOnChainAsync(idBytes, proofElements, publicInputs);
+                string txHash = await _proofSubmitter.SubmitProofAsync(idBytes, proofElements, publicInputs);
 
                 Console.WriteLine($"Sikeres benyújtás! Tranzakciós hash: {txHash}");
+                return txHash;
+            }
+
+            private static ulong ToSmallestUnit(decimal amount) =>
+                checked((ulong)(amount * 100_000_000m));
+
+            private static BigInteger ParseHexBigInteger(string value)
+            {
+                string hex = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? value[2..]
+                    : value;
+                return new BigInteger(Convert.FromHexString(hex), isUnsigned: true, isBigEndian: true);
             }
         }
     }

@@ -1,0 +1,105 @@
+﻿@page "/"
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
+
+<PageTitle>Fizetőképesség igazolása</PageTitle>
+
+<div class="container-fluid mt-2">
+    <!-- Fő szekció -->
+    <div class="p-5 mb-3 bg-light rounded-3 shadow-sm border">
+        <div class="container-fluid py-2">
+            <h1 class="display-5 fw-bold text-dark">
+                Nullaismeretű kriptográfiai bizonyítás a fizetőképességről
+            </h1>
+            <p class="col-md-10 fs-5 text-muted mt-3">
+                Kriptográfiai igazolás a fizetőképességről adatminimalizációval.
+                A rendszer Merkle-fák és Rust-alapú zk-STARK technológia kombinációjával biztosítja a pénzügyi átláthatóságot, az ügyfelek adatvédelme mellett.
+            </p>
+            <a href="/proof-generation" class="btn btn-primary btn-lg mt-3 shadow-sm">
+                Bizonyítás generálása
+            </a>
+
+            <a href="/clientverification" class="btn btn-outline-secondary btn-lg mt-3 ms-2 shadow-sm">
+                Azonosító hitelesítése
+            </a>
+        </div>
+    </div>
+
+    <!-- Statisztikai kártyák -->
+    <div class="row g-4 mb-4">
+        <!-- 1. Kártya: Rendszer állapota -->
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0 border-bottom border-success border-3">
+                <div class="card-body text-center">
+                    <h6 class="text-uppercase text-muted fw-bold mb-3">Rendszer állapota</h6>
+                    <h2 class="display-6 fw-bold text-success mb-0">Fizetőképes</h2>
+                    <p class="card-text text-muted mt-2">Eszközök &ge; Kötelezettségek</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Kártya: Utolsó Merkle root -->
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0 border-bottom border-primary border-3">
+                <div class="card-body text-center">
+                    <h6 class="text-uppercase text-muted fw-bold mb-3">
+                        Utolsó Audit (Merkle Root)
+                    </h6>
+
+                    <h2 class="fs-3 fw-bold text-dark mb-0 font-monospace">
+                        0x8f4...2b9c
+                    </h2>
+                    <p class="card-text text-muted mt-2">Utolsó Merkle root</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Kártya: Adatbázis statisztika -->
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0 border-bottom border-info border-3">
+                <div class="card-body text-center">
+                    <h6 class="text-uppercase text-muted fw-bold mb-3">Ellenőrzött azonosítók</h6>
+                    <h2 class="display-6 fw-bold text-info mb-0">@_verificationQueryCount.ToString("N0")</h2>
+                    <p class="card-text text-muted mt-2">Off-chain EF Core adatbázisból</p>
+                </div>
+            </div>
+
+@code {
+    private long _verificationQueryCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
+        _verificationQueryCount = await db.VerificationQueries.LongCountAsync();
+    }
+}
+        </div>
+    </div>
+
+    <!-- Rendszernapló vagy információs panel? -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white fw-bold">
+            Rendszer komponensek állapota
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>C# .NET Entity Framework adatbázis</span>
+
+                    <span class="badge bg-success rounded-pill d-inline-flex align-items-center gap-2"
+                          role="status"
+                          aria-live="polite">
+                        <span class="bg-white rounded-circle"
+                              style="width: 0.5rem; height: 0.5rem;"
+                              aria-hidden="true"></span>
+                        Kapcsolódva
+                    </span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    Rust zkVM Prover (STARK)
+                    <span class="badge bg-success rounded-pill">Elérhető</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>

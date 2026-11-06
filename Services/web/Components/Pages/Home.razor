@@ -1,6 +1,8 @@
 @page "/"
+@rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject SolvencyProof.Services.ZkProofClient ZkProofClient
 
 <PageTitle>Fizetőképesség igazolása</PageTitle>
 
@@ -29,11 +31,31 @@
     <div class="row g-4 mb-4">
         <!-- 1. Kártya: Rendszer állapota -->
         <div class="col-md-4">
-            <div class="card h-100 shadow-sm border-0 border-bottom border-success border-3">
+            <div class="card h-100 shadow-sm border-0 border-bottom @(_rustConnection == true ? "border-success" : "border-danger") border-3">
                 <div class="card-body text-center">
                     <h6 class="text-uppercase text-muted fw-bold mb-3">Rendszer állapota</h6>
-                    <h2 class="display-6 fw-bold text-success mb-0">Fizetőképes</h2>
-                    <p class="card-text text-muted mt-2">Eszközök &ge; Kötelezettségek</p>
+                    @if (_isCheckingRust)
+                    {
+                        <h2 class="display-6 fw-bold text-secondary mb-0">Ellenőrzés...</h2>
+                        <p class="card-text text-muted mt-2">C# backend &rarr; Rust zkVM prover</p>
+                    }
+                    else if (_rustConnection == true)
+                    {
+                        <h2 class="display-6 fw-bold text-success mb-0">Kapcsolódva</h2>
+                        <p class="card-text text-muted mt-2">A C# backend eléri a Rust zkVM provert.</p>
+                    }
+                    else
+                    {
+                        <h2 class="display-6 fw-bold text-danger mb-0">Nem érhető el</h2>
+                        <p class="card-text text-muted mt-2">A Rust zkVM prover nem válaszol.</p>
+                    }
+
+                    <button class="btn btn-sm btn-outline-secondary mt-2"
+                            type="button"
+                            @onclick="CheckRustConnectionAsync"
+                            disabled="@_isCheckingRust">
+                        @(_isCheckingRust ? "Ellenőrzés..." : "Újraellenőrzés")
+                    </button>
                 </div>
             </div>
         </div>
@@ -66,11 +88,28 @@
 
 @code {
     private long _verificationQueryCount;
+    private bool? _rustConnection;
+    private bool _isCheckingRust;
 
     protected override async Task OnInitializedAsync()
     {
         await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
         _verificationQueryCount = await db.VerificationQueries.LongCountAsync();
+        await CheckRustConnectionAsync();
+    }
+
+    private async Task CheckRustConnectionAsync()
+    {
+        _isCheckingRust = true;
+
+        try
+        {
+            _rustConnection = await ZkProofClient.IsRustAvailableAsync();
+        }
+        finally
+        {
+            _isCheckingRust = false;
+        }
     }
 }
         </div>

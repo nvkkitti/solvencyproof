@@ -22,7 +22,26 @@ public class ZkProofClient
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    public async Task<EvmProofResponse> GenerateProofAsync(
+    public async Task<bool> IsRustAvailableAsync()
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
+
+        try
+        {
+            using HttpResponseMessage response = await _httpClient.GetAsync("api/v1/health", timeout.Token);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<ProofResponse> GenerateProofAsync(
         string institutionId,
         ulong totalAssets,
         ulong totalLiabilities)
@@ -30,7 +49,7 @@ public class ZkProofClient
         var requestPayload = new ProofRequest(institutionId, totalAssets, totalLiabilities);
         var response = await _httpClient.PostAsJsonAsync("api/v1/generate-proof", requestPayload);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<EvmProofResponse>()
+        return await response.Content.ReadFromJsonAsync<ProofResponse>()
             ?? throw new InvalidOperationException("The proof service returned an empty response.");
     }
 }
