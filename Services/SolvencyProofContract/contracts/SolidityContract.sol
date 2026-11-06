@@ -17,7 +17,7 @@ interface ISTARKVerifier {
  * @title ProofOfSolvency
  * @dev On-chain verifikátor a fizetőképesség igazolására (v >= T)
  */
-contract SolvencyProofContract {
+contract ProofOfSolvency {
     ISTARKVerifier public starkVerifier;
     
     // Események a döntés kimenetének rögzítésére

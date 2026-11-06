@@ -1,0 +1,243 @@
+Using launch settings from C:\Users\novakkk\source\repos\SolvencyProof\Services\web\Properties\launchSettings.json...
+warn: Microsoft.EntityFrameworkCore.Model.Validation[30000]
+      No store type was specified for the decimal property 'Balance' on entity type 'Account'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+warn: Microsoft.EntityFrameworkCore.Model.Validation[30000]
+      No store type was specified for the decimal property 'TotalAssets' on entity type 'SolvencyAudit'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+warn: Microsoft.EntityFrameworkCore.Model.Validation[30000]
+      No store type was specified for the decimal property 'TotalLiabilities' on entity type 'SolvencyAudit'. This will cause values to be silently truncated if they do not fit in the default precision and scale. Explicitly specify the SQL server column type that can accommodate all the values in 'OnModelCreating' using 'HasColumnType', specify precision and scale using 'HasPrecision', or configure a value converter using 'HasConversion'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (48ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Migrations[20411]
+      Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (64ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @result int;
+      EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+      SELECT @result
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+      BEGIN
+          CREATE TABLE [__EFMigrationsHistory] (
+              [MigrationId] nvarchar(150) NOT NULL,
+              [ProductVersion] nvarchar(32) NOT NULL,
+              CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+          );
+      END;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (27ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [MigrationId], [ProductVersion]
+      FROM [__EFMigrationsHistory]
+      ORDER BY [MigrationId];
+info: Microsoft.EntityFrameworkCore.Migrations[20405]
+      No migrations were applied. The database is already up to date.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @result int;
+      EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+      SELECT @result
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5080
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Users\novakkk\source\repos\SolvencyProof\Services\web
+warn: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware[3]
+      Failed to determine the https port for redirect.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (133ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (Size = 8000) (DbType = Binary), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 32) (DbType = Binary), @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime2), @p7='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p8='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p9='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      INSERT INTO [SolvencyAudit] ([Id], [CommitmentCDelta], [CommitmentCt], [CommitmentCv], [MerkleRoot], [Status], [Timestamp], [TotalAssets], [TotalLiabilities], [ZkProof])
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(1) [s].[Id], [s].[CommitmentCDelta], [s].[CommitmentCt], [s].[CommitmentCv], [s].[MerkleRoot], [s].[Status], [s].[Timestamp], [s].[TotalAssets], [s].[TotalLiabilities], [s].[ZkProof]
+      FROM [SolvencyAudit] AS [s]
+      WHERE [s].[Id] = @p
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 1. lépés: Ügyfélegyenlegek lekérdezése az adatbázisból...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [a].[Id], [a].[Balance], [a].[LastUpdate], [a].[MerkleLeafSalt]
+      FROM [Account] AS [a]
+      ORDER BY [a].[Id]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (13ms) [Parameters=[@p3='?' (DbType = Guid), @p0='?' (Size = 32) (DbType = Binary), @p1='?' (DbType = Int32), @p2='?' (Precision = 18) (Scale = 2) (DbType = Decimal)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [MerkleRoot] = @p0, [Status] = @p1, [TotalAssets] = @p2
+      OUTPUT 1
+      WHERE [Id] = @p3;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 2. lépés: Merkle-fa és zk-STARK bizonyíték kérése a Rust szervertől (127.0.0.1:3000)...
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[100]
+      Start processing HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[100]
+      Sending HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[101]
+      Received HTTP response headers after 1067.0726ms - 200
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[101]
+      End processing HTTP request after 1086.3581ms - 200
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (DbType = Guid), @p7='?' (DbType = Guid), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 8000) (DbType = Binary), @p5='?' (Size = 8000) (DbType = Binary), @p6='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET NOCOUNT ON;
+      INSERT INTO [CryptographicSecrets] ([Id], [BlindingFactorR], [SolvencyAuditId])
+      VALUES (@p0, @p1, @p2);
+      UPDATE [SolvencyAudit] SET [CommitmentCDelta] = @p3, [CommitmentCt] = @p4, [CommitmentCv] = @p5, [ZkProof] = @p6
+      OUTPUT 1
+      WHERE [Id] = @p7;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 3. lépés: submitAndVerifyProof tranzakció küldése a Hardhat láncra (127.0.0.1:8545)...
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 4. lépés: On-chain ellenőrzés, tranzakció: 0x1a28ed75746c7b89452deb9942b4433e470e56ecb3de4e2d49102697b31de5f9
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (10ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [Status] = @p0
+      OUTPUT 1
+      WHERE [Id] = @p1;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 5. lépés: Az audit sikeres. Tranzakciós hash: 0x1a28ed75746c7b89452deb9942b4433e470e56ecb3de4e2d49102697b31de5f9
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT_BIG(*)
+      FROM [VerificationQueries] AS [v]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (22ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(1) [s].[MerkleRoot]
+      FROM [SolvencyAudit] AS [s]
+      WHERE [s].[Status] = 2
+      ORDER BY [s].[Timestamp] DESC
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (11ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (Size = 8000) (DbType = Binary), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 32) (DbType = Binary), @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime2), @p7='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p8='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p9='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      INSERT INTO [SolvencyAudit] ([Id], [CommitmentCDelta], [CommitmentCt], [CommitmentCv], [MerkleRoot], [Status], [Timestamp], [TotalAssets], [TotalLiabilities], [ZkProof])
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(1) [s].[Id], [s].[CommitmentCDelta], [s].[CommitmentCt], [s].[CommitmentCv], [s].[MerkleRoot], [s].[Status], [s].[Timestamp], [s].[TotalAssets], [s].[TotalLiabilities], [s].[ZkProof]
+      FROM [SolvencyAudit] AS [s]
+      WHERE [s].[Id] = @p
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 1. lépés: Ügyfélegyenlegek lekérdezése az adatbázisból...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [a].[Id], [a].[Balance], [a].[LastUpdate], [a].[MerkleLeafSalt]
+      FROM [Account] AS [a]
+      ORDER BY [a].[Id]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[@p3='?' (DbType = Guid), @p0='?' (Size = 32) (DbType = Binary), @p1='?' (DbType = Int32), @p2='?' (Precision = 18) (Scale = 2) (DbType = Decimal)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [MerkleRoot] = @p0, [Status] = @p1, [TotalAssets] = @p2
+      OUTPUT 1
+      WHERE [Id] = @p3;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 2. lépés: Merkle-fa és zk-STARK bizonyíték kérése a Rust szervertől (127.0.0.1:3000)...
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[100]
+      Start processing HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[100]
+      Sending HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[101]
+      Received HTTP response headers after 5.8757ms - 200
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[101]
+      End processing HTTP request after 6.0015ms - 200
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (DbType = Guid), @p7='?' (DbType = Guid), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 8000) (DbType = Binary), @p5='?' (Size = 8000) (DbType = Binary), @p6='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET NOCOUNT ON;
+      INSERT INTO [CryptographicSecrets] ([Id], [BlindingFactorR], [SolvencyAuditId])
+      VALUES (@p0, @p1, @p2);
+      UPDATE [SolvencyAudit] SET [CommitmentCDelta] = @p3, [CommitmentCt] = @p4, [CommitmentCv] = @p5, [ZkProof] = @p6
+      OUTPUT 1
+      WHERE [Id] = @p7;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 3. lépés: submitAndVerifyProof tranzakció küldése a Hardhat láncra (127.0.0.1:8545)...
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 4. lépés: On-chain ellenőrzés, tranzakció: 0x90cd5f94da7f5e05ff18ad88004c515980e55b8ff17ab022ebd34b9ff3190591
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [Status] = @p0
+      OUTPUT 1
+      WHERE [Id] = @p1;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 5. lépés: Az audit sikeres. Tranzakciós hash: 0x90cd5f94da7f5e05ff18ad88004c515980e55b8ff17ab022ebd34b9ff3190591
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT_BIG(*)
+      FROM [VerificationQueries] AS [v]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (9ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(1) [s].[MerkleRoot]
+      FROM [SolvencyAudit] AS [s]
+      WHERE [s].[Status] = 2
+      ORDER BY [s].[Timestamp] DESC
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (16ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (Size = 8000) (DbType = Binary), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 32) (DbType = Binary), @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime2), @p7='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p8='?' (Precision = 18) (Scale = 2) (DbType = Decimal), @p9='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      INSERT INTO [SolvencyAudit] ([Id], [CommitmentCDelta], [CommitmentCt], [CommitmentCv], [MerkleRoot], [Status], [Timestamp], [TotalAssets], [TotalLiabilities], [ZkProof])
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT TOP(1) [s].[Id], [s].[CommitmentCDelta], [s].[CommitmentCt], [s].[CommitmentCv], [s].[MerkleRoot], [s].[Status], [s].[Timestamp], [s].[TotalAssets], [s].[TotalLiabilities], [s].[ZkProof]
+      FROM [SolvencyAudit] AS [s]
+      WHERE [s].[Id] = @p
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 1. lépés: Ügyfélegyenlegek lekérdezése az adatbázisból...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [a].[Id], [a].[Balance], [a].[LastUpdate], [a].[MerkleLeafSalt]
+      FROM [Account] AS [a]
+      ORDER BY [a].[Id]
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[@p3='?' (DbType = Guid), @p0='?' (Size = 32) (DbType = Binary), @p1='?' (DbType = Int32), @p2='?' (Precision = 18) (Scale = 2) (DbType = Decimal)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [MerkleRoot] = @p0, [Status] = @p1, [TotalAssets] = @p2
+      OUTPUT 1
+      WHERE [Id] = @p3;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 2. lépés: Merkle-fa és zk-STARK bizonyíték kérése a Rust szervertől (127.0.0.1:3000)...
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[100]
+      Start processing HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[100]
+      Sending HTTP request POST http://127.0.0.1:3000/api/v1/generate-proof
+info: System.Net.Http.HttpClient.ZkProofClient.ClientHandler[101]
+      Received HTTP response headers after 10.7179ms - 200
+info: System.Net.Http.HttpClient.ZkProofClient.LogicalHandler[101]
+      End processing HTTP request after 10.8241ms - 200
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (11ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 8000) (DbType = Binary), @p2='?' (DbType = Guid), @p7='?' (DbType = Guid), @p3='?' (Size = 8000) (DbType = Binary), @p4='?' (Size = 8000) (DbType = Binary), @p5='?' (Size = 8000) (DbType = Binary), @p6='?' (Size = 8000) (DbType = Binary)], CommandType='Text', CommandTimeout='30']
+      SET NOCOUNT ON;
+      INSERT INTO [CryptographicSecrets] ([Id], [BlindingFactorR], [SolvencyAuditId])
+      VALUES (@p0, @p1, @p2);
+      UPDATE [SolvencyAudit] SET [CommitmentCDelta] = @p3, [CommitmentCt] = @p4, [CommitmentCv] = @p5, [ZkProof] = @p6
+      OUTPUT 1
+      WHERE [Id] = @p7;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 3. lépés: submitAndVerifyProof tranzakció küldése a Hardhat láncra (127.0.0.1:8545)...
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 4. lépés: On-chain ellenőrzés, tranzakció: 0x86f46c8f58e06429ca1763bcc2c74f99cc66287ec440d57a45a05588dc96741f
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+      SET IMPLICIT_TRANSACTIONS OFF;
+      SET NOCOUNT ON;
+      UPDATE [SolvencyAudit] SET [Status] = @p0
+      OUTPUT 1
+      WHERE [Id] = @p1;
+info: SolvencyProof.Services.AuditProverService[0]
+      Audit 5. lépés: Az audit sikeres. Tranzakciós hash: 0x86f46c8f58e06429ca1763bcc2c74f99cc66287ec440d57a45a05588dc96741f

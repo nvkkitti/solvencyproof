@@ -1,0 +1,13 @@
+Axum STARK prover API fut a 127.0.0.1:3000 címen
+[1/3] Kérés érkezett: intézmény = c8a7e3df-7d31-4da2-8a45-e09da58c6926, levelek száma = 3
+[2/3] Merkle-gyökér: 0x9a552e61dd9e1b006b080a8c9a5b3089015f54e7616c23c57cf5f1bfa0ed53b7
+[3/3] Bizonyíték elkészült, válasz visszaküldve (2 elem)
+[1/3] Kérés érkezett: intézmény = 83764729-e132-4949-b1f9-18b9c4455367, levelek száma = 3
+[2/3] Merkle-gyökér: 0x9a552e61dd9e1b006b080a8c9a5b3089015f54e7616c23c57cf5f1bfa0ed53b7
+[3/3] Bizonyíték elkészült, válasz visszaküldve (2 elem)
+[1/3] Kérés érkezett: intézmény = 582741a4-7ec3-45f7-90da-df4aff4cc349, levelek száma = 3
+[2/3] Merkle-gyökér: 0x9a552e61dd9e1b006b080a8c9a5b3089015f54e7616c23c57cf5f1bfa0ed53b7
+[3/3] Bizonyíték elkészült, válasz visszaküldve (2 elem)
+[1/3] Kérés érkezett: intézmény = 238987a5-2813-47b6-83d5-b92f01abf551, levelek száma = 3
+[2/3] Merkle-gyökér: 0x9a552e61dd9e1b006b080a8c9a5b3089015f54e7616c23c57cf5f1bfa0ed53b7
+[3/3] Bizonyíték elkészült, válasz visszaküldve (2 elem)

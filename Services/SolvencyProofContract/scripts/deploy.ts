@@ -1,22 +1,16 @@
 import { network } from "hardhat";
 
-const { ethers } = await network.create();
-
 async function main() {
-  // 1. A szimulált Verifikátor telepítése
-  const MockVerifier = await ethers.getContractFactory("MockStarkVerifier");
-  const mockVerifier = await MockVerifier.deploy();
-  await mockVerifier.waitForDeployment();
-  
-  const verifierAddress = mockVerifier.target;
-  console.log(`Mock verifikátor címe: ${verifierAddress}`);
+  // A `npx hardhat node` által indított lokális lánc (http://127.0.0.1:8545)
+  const connection = await network.connect("localhost");
 
-  // 2. A SolvencyProofContract telepítése a Mock címével
-  const SolvencyProofContract = await ethers.getContractFactory("SolvencyProofContract");
-  const contract = await SolvencyProofContract.deploy(verifierAddress);
-  await contract.waitForDeployment();
-  
-  console.log(`Fő okosszerződés címe: ${contract.target}`);
+  const verifier = await connection.ethers.deployContract("MockStarkVerifier");
+  await verifier.waitForDeployment();
+  console.log(`MockStarkVerifier címe: ${verifier.target}`);
+
+  const proofOfSolvency = await connection.ethers.deployContract("ProofOfSolvency", [verifier.target]);
+  await proofOfSolvency.waitForDeployment();
+  console.log(`Okosszerződés címe (Hardhat:ContractAddress): ${proofOfSolvency.target}`);
 }
 
 main().catch((error) => {

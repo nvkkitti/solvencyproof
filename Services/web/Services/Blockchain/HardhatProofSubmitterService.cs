@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Numerics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Nethereum.Contracts;
 using Nethereum.Hex.HexTypes;
+using Nethereum.RPC.Eth.DTOs;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 
@@ -9,34 +12,36 @@ namespace SolvencyProof.Services.Blockchain;
 
 public sealed class HardhatProofSubmitterService
 {
-    private const string ContractAbi =
-        """[{"inputs":[{"internalType":"bytes32","name":"institutionId","type":"bytes32"},{"internalType":"uint256[]","name":"proof","type":"uint256[]"},{"internalType":"uint256[]","name":"publicInputs","type":"uint256[]"}],"name":"submitAndVerifyProof","outputs":[],"stateMutability":"nonpayable","type":"function"}]""";
+    private const string AbiFileName = "SolvencyContractAbi.json";
 
     private readonly Account _account;
+    private readonly Web3 _web3;
     private readonly Function _submitFunction;
-    private readonly string _contractAddress;
 
     public HardhatProofSubmitterService(IConfiguration configuration)
     {
         IConfigurationSection hardhat = configuration.GetRequiredSection("Hardhat");
-        string rpcUrl = hardhat["JsonRpcUrl"]
-            ?? throw new InvalidOperationException("Configuration 'Hardhat:JsonRpcUrl' is required.");
+        string rpcUrl = hardhat["RpcUrl"]
+            ?? throw new InvalidOperationException("Configuration 'Hardhat:RpcUrl' is required.");
         string privateKey = RequirePrivateKey(hardhat["PrivateKey"], "Hardhat:PrivateKey");
-        _contractAddress = RequireAddress(hardhat["ProofContractAddress"], "Hardhat:ProofContractAddress");
+        string contractAddress = RequireAddress(hardhat["ContractAddress"], "Hardhat:ContractAddress");
 
         if (!Uri.TryCreate(rpcUrl, UriKind.Absolute, out Uri? rpcUri)
             || (rpcUri.Scheme != Uri.UriSchemeHttp && rpcUri.Scheme != Uri.UriSchemeHttps))
         {
-            throw new InvalidOperationException("Configuration 'Hardhat:JsonRpcUrl' must be an absolute HTTP(S) URL.");
+            throw new InvalidOperationException("Configuration 'Hardhat:RpcUrl' must be an absolute HTTP(S) URL.");
         }
 
         _account = new Account(privateKey);
-        Web3 web3 = new(_account, rpcUrl);
-        _submitFunction = web3.Eth.GetContract(ContractAbi, _contractAddress)
+        _web3 = new Web3(_account, rpcUrl);
+        _submitFunction = _web3.Eth.GetContract(LoadAbi(), contractAddress)
             .GetFunction("submitAndVerifyProof");
     }
 
-    public async Task<string> SubmitProofAsync(
+    /// <summary>
+    /// Sends the submitAndVerifyProof transaction to the chain and returns its hash (A tranzakció elküldése, a hash visszaadása).
+    /// </summary>
+    public async Task<string> SendProofAsync(
         byte[] institutionIdBytes,
         BigInteger[] proofElements,
         BigInteger[] publicInputs)
@@ -50,6 +55,36 @@ public sealed class HardhatProofSubmitterService
             institutionId,
             proofElements,
             publicInputs);
+    }
+
+    /// <summary>
+    /// Waits for the transaction to be mined; a reverted verification (status 0) is an error (Megvárja a tranzakciót; a visszagörgetett verifikáció hiba).
+    /// </summary>
+    public async Task WaitForVerificationAsync(string transactionHash, CancellationToken cancellationToken = default)
+    {
+        TransactionReceipt receipt = await _web3.TransactionReceiptPolling
+            .PollForReceiptAsync(transactionHash, cancellationToken);
+
+        if (receipt.Status?.Value != 1)
+        {
+            throw new InvalidOperationException(
+                $"Az on-chain ellenőrzés sikertelen (a tranzakció visszagörgetődött): {transactionHash}");
+        }
+    }
+
+    // Parses a 0x-prefixed big-endian hex string as an unsigned uint256 (0x előtagú, big-endian hex előjel nélküli értelmezése)
+    public static BigInteger ParseUint256(string hex)
+    {
+        string digits = hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? hex[2..] : hex;
+        // The leading zero keeps BigInteger.Parse from reading a high bit as a sign (A vezető nulla megakadályozza az előjeles értelmezést)
+        return BigInteger.Parse("0" + digits, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+    }
+
+    private static string LoadAbi()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, AbiFileName);
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.GetRawText();
     }
 
     private static string RequireAddress(string? value, string settingName)

@@ -1,21 +1,44 @@
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
-import { defineConfig } from "hardhat/config";
+import { configVariable, defineConfig } from "hardhat/config";
 
-const config = defineConfig({
+export default defineConfig({
   plugins: [hardhatToolboxMochaEthersPlugin],
   solidity: {
     profiles: {
       default: {
-        compilers: [{ version: "0.8.19" }, { version: "0.8.34" }],
+        version: "0.8.34",
+      },
+      production: {
+        version: "0.8.34",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
     },
   },
   networks: {
+    hardhatMainnet: {
+      type: "edr-simulated",
+      chainType: "l1",
+    },
+    // A `npx hardhat node` által indított, 8545-ös porton figyelő node (ezt éri el a C#)
     localhost: {
       type: "http",
+      chainType: "l1",
       url: "http://127.0.0.1:8545",
+    },
+    hardhatOp: {
+      type: "edr-simulated",
+      chainType: "op",
+    },
+    sepolia: {
+      type: "http",
+      chainType: "l1",
+      url: configVariable("SEPOLIA_RPC_URL"),
+      accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
     },
   },
 });
-
-export default config;

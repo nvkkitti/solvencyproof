@@ -1,91 +1,116 @@
 ﻿@page "/proof-generation"
 @rendermode InteractiveServer
+@using SolvencyProof.Models
 @using SolvencyProof.Services
-@inject IHttpClientFactory HttpClientFactory
-@inject NavigationManager NavigationManager
-@inject ZkProofClient ZkClient
+@using Microsoft.EntityFrameworkCore
+@inject IAuditProverService AuditProver
+@inject IDbContextFactory<SolvencyProofContext> DbFactory
 
-<h3>Proof of Solvency - Bizonyítás generálása</h3>
+<PageTitle>Bizonyítás generálása</PageTitle>
 
-<button class="btn btn-primary" @onclick="GetProof">Bizonyíték kérése</button>
+<h3>Fizetőképesség igazolásnak generálása</h3>
 
-@if (!string.IsNullOrEmpty(_result))
+<button class="btn btn-primary mb-3" @onclick="RunAuditAsync" disabled="@_isProcessing">
+    @(_isProcessing ? "Folyamatban..." : "Audit indítása")
+</button>
+
+@if (_currentStep > 0)
 {
-    <div class="alert alert-success mt-3">
-        @_result
+    <ol class="list-group mb-3">
+        @for (int i = 0; i < _stepTitles.Length; i++)
+        {
+            int step = i + 1;
+            <li class="list-group-item d-flex align-items-center gap-2">
+                @if (_failedStep == step)
+                {
+                    <span class="text-danger fw-bold" aria-label="hiba">&#10007;</span>
+                }
+                else if (_currentStep > step)
+                {
+                    <span class="text-success fw-bold" aria-label="kész">&#10003;</span>
+                }
+                else if (_currentStep == step && _isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-label="folyamatban"></span>
+                }
+                else
+                {
+                    <span class="text-muted">&#9675;</span>
+                }
+                <span>@step. @_stepTitles[i]</span>
+            </li>
+        }
+    </ol>
+}
+
+@if (_result is not null)
+{
+    <div class="alert alert-success mt-2">
+        Sikeres audit! A fizetőképességi bizonyítékot a blokklánc ellenőrizte.<br />
+        Merkle root: <code>@_result.MerkleRoot</code><br />
+        Tranzakciós hash: <code>@_result.TransactionHash</code>
     </div>
 }
 
-@code {
-    private string _result = "";
-
-    private async Task GetProof()
-    {
-        try
-        {
-            _result = "Töltés..."; // Vizuális visszajelzés a felhasználónak
-            var response = await ZkClient.GenerateProofAsync("teszt_adat", 0, 0);
-            _result = $"Bizonyíték elemek: {string.Join(", ", response.ProofElements)}; Nyilvános bemenetek: {string.Join(", ", response.PublicInputs)}";
-        }
-        catch (HttpRequestException ex)
-        {
-            _result = $"Hálózati hiba: {ex.Message}";
-        }
-    }
-}
-
-@if (_proofResult != null)
-{
-    <div class="alert alert-success mt-2">  
-        Sikeres generálés! Merkle root: <strong>@_proofResult</strong>
-    </div>
-}
-
-@if (_errorMessage != null)
+@if (_errorMessage is not null)
 {
     <div class="alert alert-danger mt-2">@_errorMessage</div>
 }
 
-@code 
-{
-    private bool _isProcessing = false;
-    private string? _proofResult;
+@code {
+    private static readonly string[] _stepTitles =
+    [
+        "Adatbázis-lekérdezés (ügyfélegyenlegek)",
+        "Bizonyíték generálása (Rust Axum, zk-STARK)",
+        "Blokklánc-tranzakció (Hardhat JSON-RPC)",
+        "On-chain ellenőrzés (ProofOfSolvency + MockStarkVerifier)"
+    ];
+
+    private bool _isProcessing;
+    private int _currentStep;
+    private int _failedStep;
+    private AuditProofResult? _result;
     private string? _errorMessage;
 
-    private async Task GenerateProofAsync()
+    private async Task RunAuditAsync()
     {
         _isProcessing = true;
-        _proofResult = null;
+        _currentStep = 1;
+        _failedStep = 0;
+        _result = null;
         _errorMessage = null;
-        StateHasChanged();
+
+        // Progress<T> posts to the captured context; marshal to the Blazor renderer explicitly (A Blazor renderer szálára kell váltani)
+        var progress = new Progress<AuditProgressReport>(report => _ = InvokeAsync(() =>
+        {
+            _currentStep = report.StepIndex;
+            StateHasChanged();
+        }));
 
         try
         {
-            HttpClient client = HttpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(NavigationManager.BaseUri);
-
-            using HttpResponseMessage response = await client.PostAsync("api/audit/generate", content: null);
-            response.EnsureSuccessStatusCode();
-
-            AuditGenerationResponse? result = await response.Content.ReadFromJsonAsync<AuditGenerationResponse>();
-            if (result is null)
+            await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
+            var audit = new SolvencyAudit
             {
-                throw new InvalidOperationException("A REST API üres választ adott.");
-            }
+                Id = Guid.NewGuid(),
+                Timestamp = DateTime.UtcNow,
+                Status = AuditStatus.Prepared
+            };
+            db.SolvencyAudit.Add(audit);
+            await db.SaveChangesAsync();
 
-            _proofResult = $"0x{result.MerkleRoot}";
+            _result = await AuditProver.GenerateProofAsync(audit.Id, progress);
+            _currentStep = AuditProgressReport.TotalSteps + 1;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Hiba: {ex.Message}");
-            _errorMessage = "A bizonyítás generálása sikertelen. Kérjük, próbálja újra később.";
+            Console.Error.WriteLine($"Hiba: {ex}");
+            _failedStep = _currentStep;
+            _errorMessage = $"A bizonyítás generálása sikertelen: {ex.Message}";
         }
         finally
         {
             _isProcessing = false;
-            StateHasChanged();
         }
     }
-
-    private sealed record AuditGenerationResponse(Guid Id, string Status, DateTime Timestamp, decimal TotalAssets, string MerkleRoot);
 }

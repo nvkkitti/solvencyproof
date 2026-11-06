@@ -7,7 +7,8 @@ namespace SolvencyProof.Services;
 public record ProofRequest(
     [property: JsonPropertyName("institution_id")] string InstitutionId,
     [property: JsonPropertyName("total_assets")] ulong TotalAssets,
-    [property: JsonPropertyName("total_liabilities")] ulong TotalLiabilities
+    [property: JsonPropertyName("total_liabilities")] ulong TotalLiabilities,
+    [property: JsonPropertyName("leaves")] string[] Leaves
 );
 
 public class ZkProofClient
@@ -22,34 +23,22 @@ public class ZkProofClient
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    public async Task<bool> IsRustAvailableAsync()
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
-
-        try
-        {
-            using HttpResponseMessage response = await _httpClient.GetAsync("api/v1/health", timeout.Token);
-            return response.IsSuccessStatusCode;
-        }
-        catch (HttpRequestException)
-        {
-            return false;
-        }
-        catch (TaskCanceledException)
-        {
-            return false;
-        }
-    }
-
-    public async Task<ProofResponse> GenerateProofAsync(
+    public async Task<EvmProofResponse> GenerateProofAsync(
         string institutionId,
         ulong totalAssets,
-        ulong totalLiabilities)
+        ulong totalLiabilities,
+        IReadOnlyList<string> leaves,
+        CancellationToken cancellationToken = default)
     {
-        var requestPayload = new ProofRequest(institutionId, totalAssets, totalLiabilities);
-        var response = await _httpClient.PostAsJsonAsync("api/v1/generate-proof", requestPayload);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ProofResponse>()
+        var requestPayload = new ProofRequest(institutionId, totalAssets, totalLiabilities, leaves.ToArray());
+        var response = await _httpClient.PostAsJsonAsync("api/v1/generate-proof", requestPayload, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            string detail = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException($"The proof service returned {(int)response.StatusCode}: {detail}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<EvmProofResponse>(cancellationToken)
             ?? throw new InvalidOperationException("The proof service returned an empty response.");
     }
 }

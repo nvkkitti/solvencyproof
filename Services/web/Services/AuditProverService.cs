@@ -7,7 +7,7 @@ using SolvencyProof.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using SolvencyProof.Services.Blockchain;
 
@@ -18,48 +18,73 @@ namespace SolvencyProof.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AuditProverService> _logger;
         private readonly IDataProtector _blindingFactorProtector;
-
+        private readonly ZkProofClient _zkProofClient;
+        private readonly HardhatProofSubmitterService _proofSubmitter;
 
         public AuditProverService(
             IServiceScopeFactory scopeFactory,
             ILogger<AuditProverService> logger,
-            IDataProtectionProvider dataProtectionProvider)
+            IDataProtectionProvider dataProtectionProvider,
+            ZkProofClient zkProofClient,
+            HardhatProofSubmitterService proofSubmitter)
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
             _blindingFactorProtector = dataProtectionProvider.CreateProtector("SolvencyProof.Audit.BlindingFactor.v1");
+            _zkProofClient = zkProofClient;
+            _proofSubmitter = proofSubmitter;
         }
-        public async Task GenerateProofAsync(Guid auditId)
+
+        public async Task<AuditProofResult> GenerateProofAsync(
+            Guid auditId,
+            IProgress<AuditProgressReport>? progress = null,
+            CancellationToken cancellationToken = default)
         {
             using IServiceScope scope = _scopeFactory.CreateScope();
             SolvencyProofContext db = scope.ServiceProvider.GetRequiredService<SolvencyProofContext>();
-            SolvencyAudit? audit = await db.SolvencyAudit.FindAsync(auditId);
+            SolvencyAudit audit = await db.SolvencyAudit.FindAsync([auditId], cancellationToken)
+                ?? throw new InvalidOperationException($"A(z) {auditId} azonosítójú audit nem található.");
 
-            if (audit is null)
+            try
             {
-                return;
+                return await RunPipelineAsync(db, audit, progress, cancellationToken);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Az audit ({AuditId}) sikertelen.", auditId);
+                audit.Status = AuditStatus.Failed;
+                await db.SaveChangesAsync(CancellationToken.None);
+                throw;
+            }
+        }
 
+        private async Task<AuditProofResult> RunPipelineAsync(
+            SolvencyProofContext db,
+            SolvencyAudit audit,
+            IProgress<AuditProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            // Step 1: read the customer balances from the SQL database (1. lépés: egyenlegek kiolvasása az SQL adatbázisból)
+            Report(progress, 1, "Ügyfélegyenlegek lekérdezése az adatbázisból...");
             List<Account> accounts = await db.Account
                 .AsNoTracking()
                 .OrderBy(account => account.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             if (accounts.Count == 0)
             {
-                audit.Status = AuditStatus.Failed;
-                await db.SaveChangesAsync();
-                return;
+                throw new InvalidOperationException("Nincs ügyfélszámla az adatbázisban, az audit nem futtatható.");
             }
 
             audit.Status = AuditStatus.Proving;
             audit.TotalAssets = accounts.Sum(account => account.Balance);
-            audit.MerkleRoot = MerkleTreeBuilder.BuildTreeAndGetRoot(accounts);
-            await db.SaveChangesAsync();
+            byte[] localMerkleRoot = MerkleTreeBuilder.BuildTreeAndGetRoot(accounts);
+            audit.MerkleRoot = localMerkleRoot;
+            await db.SaveChangesAsync(cancellationToken);
 
             // Convert the amounts (decimal) to the smallest indivisible unit (for example, an integer) (Az összegeket (decimal) át kell váltani a legkisebb oszthatatlan egységre (pl. egész számra)).
             // Assume that our value uses 8 decimal places (Tegyük fel, hogy az értékünk 8 tizedesjegyet használ)
-            long totalLiabilitiesInSmallestUnit = (long)(audit.TotalLiabilities * 100_000_000m);
+            long totalLiabilitiesInSmallestUnit = checked((long)(audit.TotalLiabilities * 100_000_000m));
             long totalAssetsInSmallestUnit = checked((long)(audit.TotalAssets * 100_000_000m));
 
             // 1. Liabilities (C_T) (Kötelezettségek (C_T))
@@ -72,73 +97,71 @@ namespace SolvencyProof.Services
             // 3. Difference using homomorphic subtraction (C_Delta) (Különbség homomorf kivonással (C_Delta))
             byte[] differenceCommitment = PedersenHelper.SubtractCommitments(assetCommitment, liabilityCommitment);
 
-            // The dummy ZK proof remains for now (Dummy ZK proof marad egyelőre)
-            byte[] zkProof = CryptoHelper.GenerateRandomBytes(256);
+            // Step 2: ask the Rust Axum prover for the zk-STARK proof (2. lépés: zk-STARK bizonyíték kérése a Rust Axum szervertől)
+            Report(progress, 2, "Merkle-fa és zk-STARK bizonyíték kérése a Rust szervertől (127.0.0.1:3000)...");
+            string institutionId = audit.Id.ToString();
+            string[] leaves = accounts
+                .Select(account => "0x" + Convert.ToHexString(MerkleTreeBuilder.GenerateLeafHash(account)).ToLowerInvariant())
+                .ToArray();
+
+            EvmProofResponse proofData = await _zkProofClient.GenerateProofAsync(
+                institutionId,
+                checked((ulong)totalAssetsInSmallestUnit),
+                checked((ulong)totalLiabilitiesInSmallestUnit),
+                leaves,
+                cancellationToken);
+
+            if (proofData.ProofElements.Length == 0 || proofData.PublicInputs.Length < 2)
+            {
+                throw new InvalidOperationException("A Rust szerver hiányos bizonyítékot adott vissza.");
+            }
+
+            // The root computed by Rust must match the one computed here (A Rust által számolt gyökérnek egyeznie kell a helyben számolttal)
+            string merkleRootHex = "0x" + Convert.ToHexString(localMerkleRoot).ToLowerInvariant();
+            if (!string.Equals(proofData.PublicInputs[1], merkleRootHex, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"A Rust és a C# Merkle-gyökere eltér: {proofData.PublicInputs[1]} != {merkleRootHex}");
+            }
+
+            var proofElements = proofData.ProofElements.Select(HardhatProofSubmitterService.ParseUint256).ToArray();
+            var publicInputs = proofData.PublicInputs.Select(HardhatProofSubmitterService.ParseUint256).ToArray();
 
             audit.CommitmentCt = liabilityCommitment;
             audit.CommitmentCv = assetCommitment;
             audit.CommitmentCDelta = differenceCommitment;
-            audit.ZkProof = zkProof;
+            audit.ZkProof = proofData.ProofElements
+                .SelectMany(element => Convert.FromHexString(element[2..]))
+                .ToArray();
             db.CryptographicSecrets.Add(new CryptographicSecret
             {
                 Id = Guid.NewGuid(),
                 SolvencyAuditId = audit.Id,
                 BlindingFactorR = _blindingFactorProtector.Protect(blindingFactor)
             });
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Step 3: send the transaction to the Hardhat chain (3. lépés: tranzakció küldése a Hardhat láncra)
+            Report(progress, 3, "submitAndVerifyProof tranzakció küldése a Hardhat láncra (127.0.0.1:8545)...");
+            byte[] institutionIdBytes = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(institutionId));
+            string transactionHash = await _proofSubmitter.SendProofAsync(institutionIdBytes, proofElements, publicInputs);
+
+            // Step 4: the contract verifies the proof on-chain via MockStarkVerifier (4. lépés: on-chain ellenőrzés)
+            Report(progress, 4, $"On-chain ellenőrzés, tranzakció: {transactionHash}");
+            await _proofSubmitter.WaitForVerificationAsync(transactionHash, cancellationToken);
+
+            audit.Status = AuditStatus.VerifiedOnChain;
+            await db.SaveChangesAsync(cancellationToken);
+
+            Report(progress, AuditProgressReport.TotalSteps + 1, $"Az audit sikeres. Tranzakciós hash: {transactionHash}");
+            return new AuditProofResult(transactionHash, merkleRootHex);
         }
-        
-        public class ProofOrchestratorService
+
+        private void Report(IProgress<AuditProgressReport>? progress, int stepIndex, string message)
         {
-            private readonly HttpClient _rustAxumClient;
-            private readonly HardhatProofSubmitterService _proofSubmitter;
-
-            public ProofOrchestratorService(HttpClient rustAxumClient, HardhatProofSubmitterService proofSubmitter)
-            {
-                _rustAxumClient = rustAxumClient;
-                _proofSubmitter = proofSubmitter;
-            }
-            public async Task<string> RunAuditAndSubmitAsync(
-                string institutionId,
-                decimal totalAssets,
-                decimal totalLiabilities)
-            {
-                var rustResponse = await _rustAxumClient.PostAsJsonAsync(
-                    "/api/v1/generate-proof",
-                    new ProofRequest(
-                        institutionId,
-                        ToSmallestUnit(totalAssets),
-                        ToSmallestUnit(totalLiabilities)));
-                rustResponse.EnsureSuccessStatusCode();
-                var proofData = await rustResponse.Content.ReadFromJsonAsync<ProofResponse>()
-                    ?? throw new InvalidOperationException("The proof service returned an empty response.");
-
-                //Type conversions for data coming from the Rust Axum service (Típuskonverziók a Rust Axum szolgáltatásból érkező adatokhoz)    
-                var proofElements = proofData.ProofElements
-                    .Select(ParseHexBigInteger)
-                    .ToArray();
-
-                var publicInputs = proofData.PublicInputs
-                    .Select(ParseHexBigInteger)
-                    .ToArray();
-
-                byte[] idBytes = System.Text.Encoding.UTF8.GetBytes(institutionId);
-                string txHash = await _proofSubmitter.SubmitProofAsync(idBytes, proofElements, publicInputs);
-
-                Console.WriteLine($"Sikeres benyújtás! Tranzakciós hash: {txHash}");
-                return txHash;
-            }
-
-            private static ulong ToSmallestUnit(decimal amount) =>
-                checked((ulong)(amount * 100_000_000m));
-
-            private static BigInteger ParseHexBigInteger(string value)
-            {
-                string hex = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                    ? value[2..]
-                    : value;
-                return new BigInteger(Convert.FromHexString(hex), isUnsigned: true, isBigEndian: true);
-            }
+            _logger.LogInformation("Audit {Step}. lépés: {Message}", stepIndex, message);
+            progress?.Report(new AuditProgressReport { StepIndex = stepIndex, Message = message });
         }
     }
 }

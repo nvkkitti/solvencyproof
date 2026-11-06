@@ -25,9 +25,7 @@ public partial class Program
             .AddInteractiveServerComponents();
 
         builder.Services.AddHttpClient<ZkProofClient>();
-        builder.Services.AddHttpClient<AuditProverService.ProofOrchestratorService>(client =>
-            client.BaseAddress = new Uri("http://127.0.0.1:3000/"));
-        builder.Services.AddTransient<HardhatProofSubmitterService>(sp => new HardhatProofSubmitterService(builder.Configuration));
+        builder.Services.AddSingleton<HardhatProofSubmitterService>();
 
 
         var app = builder.Build();
@@ -56,13 +54,7 @@ public partial class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        app.MapPost(
-            "/api/audit/generate",
-            async (
-                SolvencyProofContext db,
-                IAuditProverService proverService,
-                ILogger<Program> logger,
-                AuditProverService.ProofOrchestratorService orchestrator) =>
+        app.MapPost("/api/audit/generate", async (SolvencyProofContext db, IAuditProverService proverService) =>
         {
             var audit = new SolvencyAudit
             {
@@ -73,33 +65,10 @@ public partial class Program
             db.SolvencyAudit.Add(audit);
             await db.SaveChangesAsync();
 
-            try
-            {
-                await proverService.GenerateProofAsync(audit.Id);
-                await db.Entry(audit).ReloadAsync();
-
-                if (audit.Status == AuditStatus.Failed)
-                {
-                    return Results.Problem(
-                        "A bizonyíték generálásához legalább egy számla szükséges.",
-                        statusCode: StatusCodes.Status422UnprocessableEntity);
-                }
-
-                await orchestrator.RunAuditAndSubmitAsync(
-                    audit.Id.ToString(),
-                    audit.TotalAssets,
-                    audit.TotalLiabilities);
-
-                audit.Status = AuditStatus.VerifiedOnChain;
-                await db.SaveChangesAsync();
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(exception, "Audit {AuditId} failed before on-chain verification.", audit.Id);
-                audit.Status = AuditStatus.Failed;
-                await db.SaveChangesAsync();
-                throw;
-            }
+            // Delegate generation to the background service (A generálás átadása a háttérszolgáltatásnak)
+            // The service marks the audit as Failed and logs on error; this only observes the exception (A hibát a szolgáltatás naplózza)
+            _ = proverService.GenerateProofAsync(audit.Id)
+                .ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
 
             return Results.Accepted($"/api/audit/status/{audit.Id}");
         });

@@ -15,8 +15,6 @@ This example project includes:
 
 ## Usage
 
-The Hardhat compiler profile supports Solidity sources targeting both `^0.8.19` and `^0.8.34`.
-
 ### Running Tests
 
 To run all the tests in the project, execute the following command:
@@ -57,26 +55,3 @@ After setting the variable, you can run the deployment with the Sepolia network:
 ```shell
 npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
 ```
-
-### C# backend on a local Hardhat node
-
-Start a local node, then deploy the proof contracts to it:
-
-```shell
-npx hardhat node
-npx hardhat run scripts/deploy.ts --network localhost
-```
-
-Set the deployed `SolvencyProofContract` address as `Hardhat:ProofContractAddress` in the web application's configuration. Set `Hardhat__PrivateKey` in the environment to the private key of a funded local Hardhat account. The C# backend signs transactions locally, so the node logs `eth_sendRawTransaction` and the decoded `SolvencyProofContract#submitAndVerifyProof` call.
-
-For local development, the private key can be stored with .NET User Secrets instead of being added to `appsettings.json`:
-
-```shell
-dotnet user-secrets set "Hardhat:PrivateKey" "<private-key-from-hardhat-node>" --project ../web/SolvencyProof.csproj
-```
-
-Replace `<private-key-from-hardhat-node>` with the actual 64-character hexadecimal private key printed for an account by `npx hardhat node`; do not include the angle brackets or leave the placeholder text in the setting.
-
-Alternatively, set the `Hardhat__PrivateKey` environment variable before starting the web project. The `Hardhat:JsonRpcUrl` and `Hardhat:ProofContractAddress` values remain in `Services/web/appsettings.json`.
-
-The `/api/audit/generate` request now waits for proof generation and transaction submission to finish before responding.
