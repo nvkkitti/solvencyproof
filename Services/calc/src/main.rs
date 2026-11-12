@@ -150,6 +150,12 @@ fn nonce_bytes(nonce: F) -> [u8; 32] {
     bytes
 }
 
+/// The caller gets a generic message; the detail stays in the server log.
+fn internal_error(detail: impl std::fmt::Display) -> ApiError {
+    eprintln!("Belső hiba: {detail}");
+    (StatusCode::INTERNAL_SERVER_ERROR, "A bizonyítás belső hibába ütközött.".to_string())
+}
+
 fn trace_error(error: TraceError) -> ApiError {
     match error {
         TraceError::Insolvent { .. } => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()),
@@ -217,10 +223,10 @@ async fn generate_solvency_proof(
         Ok::<_, ProveError>((proof_bytes, public))
     })
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("A bizonyító szál leállt: {e}")))?
+    .map_err(internal_error)?
     .map_err(|error| match error {
         ProveError::Trace(trace) => trace_error(trace),
-        other => (StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
+        other => internal_error(other),
     })?;
 
     println!(
@@ -257,10 +263,13 @@ async fn verify_proof(Json(request): Json<VerifyRequest>) -> Result<Json<VerifyR
     let depth = request.depth;
     let result = tokio::task::spawn_blocking(move || verify_solvency(depth, &proof, &public))
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Az ellenőrző szál leállt: {e}")))?;
+        .map_err(internal_error)?;
 
     Ok(Json(match result {
         Ok(()) => VerifyResponse { valid: true, error: None },
-        Err(error) => VerifyResponse { valid: false, error: Some(error.to_string()) },
+        Err(error) => {
+            eprintln!("Az ellenőrzés sikertelen: {error}");
+            VerifyResponse { valid: false, error: Some("A bizonyíték nem ellenőrizhető.".to_string()) }
+        }
     }))
 }

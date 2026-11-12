@@ -41,7 +41,7 @@ Ez a dokumentum rétegenként bemutatja, hogy a projekt egyes részeire milyen a
 
 | Megoldás | Megjegyzés |
 |---|---|
-| Pedersen-elköteleződés secp256k1-en (korábbi, BouncyCastle) | Homomorf, de a secp256k1 pontszorzás a STARK testében (Goldilocks) nagyon drága lenne, ezért lecseréltük. A `PedersenHelper.cs` már nincs használatban. |
+| Pedersen-elköteleződés secp256k1-en (korábbi, BouncyCastle) | Homomorf, de a secp256k1 pontszorzás a STARK testében (Goldilocks) nagyon drága lenne, ezért lecseréltük. A korábbi `PedersenHelper.cs` törölve lett. |
 | **Poseidon2-alapú elköteleződés** `C_A = Poseidon2(a, r)` (jelenlegi) | Zk-barát, a körben olcsón ellenőrizhető. Elrejtő (256 bites véletlen `r`) és kötő (ütközésállóság). |
 | Merkle-fa SHA-256-tal (korábbi) | Egyszerű, de zk-körökben drága, és nem köti az egyenlegek összegét. |
 | **Poseidon2 Merkle sum tree** (jelenlegi) | A csomópont hash-e az alatta lévő összeget is köti, így a gyökér a teljes kötelezettséget is rögzíti. Az ügyfél a saját útvonalát ellenőrizheti. |

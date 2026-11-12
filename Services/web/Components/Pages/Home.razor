@@ -5,6 +5,7 @@
 @using SolvencyProof.Services
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
 @inject IAuditProverService AuditProver
+@inject ILogger<Home> Logger
 @inject NavigationManager NavigationManager
 
 <PageTitle>Fizetőképesség igazolása</PageTitle>
@@ -457,7 +458,8 @@
                 _auditLog[pendingIndex].Status = "error";
             }
 
-            _auditLog.Add(new AuditLogEntry { Message = $"Hiba: {ex.Message}", Status = "error" });
+            Logger.LogError(ex, "Az audit futtatása sikertelen.");
+            _auditLog.Add(new AuditLogEntry { Message = "Hiba történt az audit futtatása közben. Részletek a naplóban.", Status = "error" });
             _auditSuccess = false;
         }
         finally

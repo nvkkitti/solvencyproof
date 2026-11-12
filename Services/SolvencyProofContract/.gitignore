@@ -7,6 +7,9 @@
 # pnpm deploy output
 /bundle
 
+# Local deployment addresses (written by scripts/deploy.ts)
+/deployments
+
 # Hardhat Build Artifacts
 /artifacts
 

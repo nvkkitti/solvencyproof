@@ -63,6 +63,14 @@ public sealed class HardhatProofSubmitterService
         BigInteger[] proofElements,
         BigInteger[] publicInputs)
     {
+        // Checked before sending so a missing deployment fails without mining a transaction (Még a küldés előtt ellenőrizzük, hogy a szerződés kódja létezik, így telepítés nélkül nem bányászódik tranzakció)
+        string code = await _web3.Eth.GetCode.SendRequestAsync(_contractAddress);
+        if (string.IsNullOrEmpty(code) || code == "0x")
+        {
+            throw new InvalidOperationException(
+                $"A(z) {_contractAddress} címen nincs szerződés-kód (a szerződés valószínűleg nincs telepítve a Hardhat-láncon).");
+        }
+
         byte[] institutionId = new byte[32];
         Array.Copy(institutionIdBytes, institutionId, Math.Min(institutionIdBytes.Length, institutionId.Length));
         return await _submitFunction.SendTransactionAsync(

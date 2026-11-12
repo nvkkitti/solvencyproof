@@ -41,10 +41,12 @@ public sealed record VerifyProofResponse(
 public class ZkProofClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ZkProofClient> _logger;
 
-    public ZkProofClient(HttpClient httpClient, IConfiguration configuration)
+    public ZkProofClient(HttpClient httpClient, IConfiguration configuration, ILogger<ZkProofClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
         // A Rust server address, loopback:3000 unless 'ZkProver:BaseUrl' says otherwise (A Rust szerver címe)
         _httpClient.BaseAddress = new Uri(configuration["ZkProver:BaseUrl"] ?? "http://127.0.0.1:3000/");
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
@@ -59,12 +61,12 @@ public class ZkProofClient
         var response = await _httpClient.PostAsJsonAsync("api/v1/generate-proof", request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            string detail = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"The proof service returned {(int)response.StatusCode}: {detail}");
+            await LogFailureAsync("generate-proof", response, cancellationToken);
+            throw new HttpRequestException("A bizonyítási szolgáltatás hibát jelzett.");
         }
 
         return await response.Content.ReadFromJsonAsync<EvmProofResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("The proof service returned an empty response.");
+            ?? throw new InvalidOperationException("A bizonyítási szolgáltatás üres választ adott.");
     }
 
     /// <summary>Asks the prover service to check a STARK proof against public inputs (A STARK bizonyíték ellenőrzése nyilvános bemenetekkel).</summary>
@@ -75,11 +77,18 @@ public class ZkProofClient
         var response = await _httpClient.PostAsJsonAsync("api/v1/verify-proof", request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            string detail = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"The proof service returned {(int)response.StatusCode}: {detail}");
+            await LogFailureAsync("verify-proof", response, cancellationToken);
+            throw new HttpRequestException("A bizonyítási szolgáltatás hibát jelzett.");
         }
 
         return await response.Content.ReadFromJsonAsync<VerifyProofResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("The proof service returned an empty response.");
+            ?? throw new InvalidOperationException("A bizonyítási szolgáltatás üres választ adott.");
+    }
+
+    /// <summary>Logs the prover's status and body for the operator; the body never reaches the UI.</summary>
+    private async Task LogFailureAsync(string operation, HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        string body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogError("Prover {Operation} failed with {StatusCode}: {Body}", operation, (int)response.StatusCode, body);
     }
 }

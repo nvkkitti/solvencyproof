@@ -1,11 +1,14 @@
 ﻿@page "/clientverification"
 @rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
+@using System.Diagnostics
+@using System.Threading.RateLimiting
 @using SolvencyProof.Helpers
 @using SolvencyProof.Models
 @using SolvencyProof.Services
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
 @inject AccountInclusionVerifier InclusionVerifier
+@inject ILogger<ClientVerification> Logger
 
 <PageTitle>Azonosító hitelesítése</PageTitle>
 
@@ -103,6 +106,13 @@
 @code {
     private string _accountId = "";
     private bool _isVerifying = false;
+
+    private static readonly FixedWindowRateLimiter LookupLimiter = new(new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = 20,
+        Window = TimeSpan.FromMinutes(1),
+        QueueLimit = 0
+    });
     private string? _verificationResult;
     private bool _isIncluded = false;
     private InclusionVerificationResult? _inclusion;
@@ -133,6 +143,16 @@
             return;
         }
 
+        // Global cap across all visitors: a Blazor circuit has no per-request IP for the HTTP rate limiter
+        using RateLimitLease lease = LookupLimiter.AttemptAcquire(1);
+        if (!lease.IsAcquired)
+        {
+            _verificationResult = "Túl sok ellenőrzési kérés érkezett. Kérjük, várjon egy percet, majd próbálja újra.";
+            _isIncluded = false;
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
         _isVerifying = true;
         _verificationResult = null;
         StateHasChanged();
@@ -171,11 +191,14 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Az azonosító ellenőrzése sikertelen.");
             _isIncluded = false;
-            _verificationResult = $"Az ellenőrzés nem sikerült: {ex.Message}";
+            _verificationResult = "Az ellenőrzés nem sikerült. Részletek a naplóban.";
         }
         finally
         {
+            // Same minimum duration for found and not-found identifiers, so timing does not reveal existence
+            await ResponseTiming.EnsureMinimumAsync(stopwatch, ResponseTiming.PublicLookupMinimum);
             _isVerifying = false;
         }
     }

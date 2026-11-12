@@ -85,7 +85,9 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 
 | Fájl | Felelősség |
 |---|---|
-| `Program.cs` | Belépési pont. DI-regisztráció (DbContextFactory, `IAuditProverService`, DataProtection, `ZkProofClient`, `HardhatProofSubmitterService`), induláskor `Database.Migrate()`, Blazor beállítás. Két minimal API végpont: `POST /api/audit/generate` (létrehoz egy `Prepared` auditot, háttérben elindítja a szolgáltatást, `202 Accepted`) és `GET /api/audit/status/{id}` (folyamatban: csak a státusz; `VerifiedOnChain`: a nyilvános bizonyíték: gyökér, eszköz-elkötelezettség, mélység, zk-STARK bizonyíték hexadecimálisan, **az eszközök és a kötelezettségek nélkül**). |
+| `Program.cs` | Belépési pont. DI-regisztráció (DbContextFactory, `IAuditProverService`, DataProtection, `ZkProofClient`, `HardhatProofSubmitterService`), induláskor `Database.Migrate()`, Blazor beállítás. A `UseMigrationsEndPoint` csak fejlesztői módban aktív. Serilog naplózás (lásd lent). Két minimal API végpont: `POST /api/audit/generate` (létrehoz egy `Prepared` auditot, háttérben elindítja a szolgáltatást, `202 Accepted`) és `GET /api/audit/status/{id}` (folyamatban: csak a státusz; `VerifiedOnChain`: a nyilvános bizonyíték: gyökér, eszköz-elkötelezettség, mélység, zk-STARK bizonyíték hexadecimálisan, **az eszközök és a kötelezettségek nélkül**). Rate limiting: IP-nként 5 `generate` / perc, 60 `status` / perc (`429`). A `status` végpont legalább 400 ms-ot vár, hogy az időzítésből ne derüljön ki, létezik-e az azonosító (`Helpers/ResponseTiming.cs`). |
+| `Services/ZkProofClient.cs` | A Rust prover HTTP kliense. Hibás válasz esetén a törzset és a státuszkódot csak a naplóba írja, a hívó általános `HttpRequestException`-t kap. |
+
 | `Data/SolvencyProofContextFactory.cs` | Design-time factory az `dotnet ef` parancsokhoz, fix LocalDB connection stringgel. |
 | `SolvencyContractAbi.json` | A `ProofOfSolvency` szerződés ABI-ja, a `HardhatProofSubmitterService` tölti be. |
 | `appsettings.json`, `appsettings.Development.json` | Connection string és a `Hardhat` szekció (RPC URL, privát kulcs, szerződéscím). |
@@ -113,7 +115,7 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | `Layout/MainLayout.razor`, `NavMenu.razor`, `ReconnectModal.razor` (+ `.css`, `.js`) | Oldalkeret, oldalsó menü (Home, Bizonyítás generálása, Azonosító hitelesítése) és a Blazor-kapcsolat megszakadásakor megjelenő ablak. |
 | `Pages/ProofGeneration.razor` | **A valódi audit indítója.** Létrehoz egy `Prepared` auditot, meghívja az `IAuditProverService`-t, a `Progress<T>` jelentései alapján lépésenként mutatja a haladást (spinner, pipa, hiba), a végén kiírja a Merkle-gyökeret és a tranzakció hash-t. |
 | `Pages/Home.razor` | Dashboard: összes kötelezettség (az ügyfélegyenlegek összege), összes eszköz (az utolsó `VerifiedOnChain` auditból) és fizetőképességi ráta kártyákon, modális "terminál" az audit élő folyamatáról. A "Kriptográfiai Audit Indítása" gomb a valódi `IAuditProverService`-t hívja, hiba esetén újrapróbálkozást kínál. |
-| `Pages/ClientVerification.razor` | Az ügyfél beírja az azonosítóját. A rendszer az ügyfél levelétől a gyökérig vezető útvonalból újraszámolja a gyökeret, összeveti a **blokkláncról** olvasott gyökérrel, és ellenőrzi az audit zk-STARK bizonyítékát. Kiírja a levél hash-t, a gyökereket és az útvonalat (testvér-hash és részösszeg lépésenként), és naplózza a lekérdezést. |
+| `Pages/ClientVerification.razor` | Az ügyfél beírja az azonosítóját. A rendszer az ügyfél levelétől a gyökérig vezető útvonalból újraszámolja a gyökeret, összeveti a **blokkláncról** olvasott gyökérrel, és ellenőrzi az audit zk-STARK bizonyítékát. Kiírja a levél hash-t, a gyökereket és az útvonalat (testvér-hash és részösszeg lépésenként), és naplózza a lekérdezést. Az ellenőrzés legalább 400 ms-ot vár (találat és nincs találat esetén egyaránt), és globálisan 20 ellenőrzés / perc a limit (a Blazor-körben nincs IP a HTTP rate limiterhez). |
 | `Pages/AccountPages/` (`Index`, `Create`, `Details`, `Edit`, `Delete`) | Scaffoldolt CRUD oldalak az `Account` táblához. |
 | `Pages/SolvencyAuditPages/` (`Index`, `Create`, `Details`, `Edit`, `Delete`) | Ugyanez a `SolvencyAudit` táblához. |
 | `Pages/Error.razor`, `NotFound.razor` | Hiba- és 404 oldal. |
@@ -141,7 +143,7 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | `contracts/SolidityContract.sol` | **A fő szerződés, a `ProofOfSolvency`.** A `submitAndVerifyProof(institutionId, proof, publicInputs)` meghívja a `starkVerifier.verifyProof`-ot. Siker esetén `SolvencyVerified` eseményt emittál (a Merkle-gyökérrel), különben `VerificationFailed` eseményt, majd revert. Itt van az `ISTARKVerifier` interfész is. |
 | `contracts/MockStarkVerifier.sol` | Álverifikátor: minden nem üres bizonyítékot elfogad (`proof.length > 0` és `publicInputs.length ≥ 2`). A valódi STARK-verifikátor helyett áll. |
 | `contracts/Counter.sol`, `contracts/Counter.t.sol`, `test/Counter.ts`, `ignition/modules/Counter.ts` | A Hardhat sablon példa-szerződése, tesztjei és deploy-modulja. A solvency-logikához nem kapcsolódnak. |
-| `scripts/deploy.ts` | Telepíti a `MockStarkVerifier`-t, majd a `ProofOfSolvency`-t (a verifikátor címével) a helyi láncra. A kiírt cím kerül a `web/appsettings.json` `Hardhat:ContractAddress` mezőjébe. |
+| `scripts/deploy.ts` | Telepíti a `MockStarkVerifier`-t, majd a `ProofOfSolvency`-t (a verifikátor címével) a helyi láncra. A címet a `deployments/localhost.json` fájlba írja (`Hardhat:ContractAddress` alakban), amelyet a `web` induláskor felülírási konfigurációként olvas. |
 | `scripts/send-op-tx.ts` | Hardhat sablon: egy OP-chain tranzakció küldése példaként. |
 | `hardhat.config.ts` | Fordító (Solidity 0.8.34) és hálózatok (`localhost:8545`, szimulált láncok, Sepolia). |
 | `package.json`, `tsconfig.json`, `.gitignore` | Node/TypeScript projektbeállítás. |
@@ -154,17 +156,24 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 
 | Fájl | Megjegyzés |
 |---|---|
-| `web.log`, `rust.log` | Futási naplók, nem tartoznak a verziókezelésbe. |
+| `web.log`, `rust.log` | Régi futási naplók, nem tartoznak a verziókezelésbe. |
+| `web/logs/` | A Serilog naplófájljai (`solvencyproof-*.log`, `telemetry-*.log`), napi rotációval. Nem kerülnek a verziókezelésbe (`*.log`). |
+| `SolvencyProof.AppHost/` | .NET Aspire AppHost: a prover (`cargo run --release`), a Hardhat node és a `web` projekt együttes indítása. |
+
 
 ---
 
 ## 6. Futtatás sorrendje
 
 1. `npx hardhat node` a `SolvencyProofContract/` mappában (8545-ös port).
-2. `npx hardhat run scripts/deploy.ts --network localhost`, majd a kiírt szerződéscím beállítása a `web/appsettings.json` `Hardhat:ContractAddress` mezőjében.
+2. `npx hardhat run scripts/deploy.ts --network localhost`. A cím a `SolvencyProofContract/deployments/localhost.json` fájlba kerül, a `web` ezt olvassa indításkor (a `web/appsettings.json` `Hardhat:ContractAddress` csak tartalék).
 3. A prover indítása a `calc/` mappában: `cargo run --release` (a `--release` fontos, a bizonyítás debug módban lassú), 3000-es port.
    Ha a rustup-proxy késik, a toolchain `cargo.exe`-jét közvetlenül is hívhatod.
 4. A `web/` alkalmazás indítása (`dotnet run`); induláskor automatikusan lefutnak a migrációk.
+
+Alternatívaként az Aspire AppHost egy paranccsal indítja a provert, a Hardhat node-ot, telepíti a szerződést (`hardhat-deploy`) és a `web` alkalmazást: `dotnet run --project SolvencyProof.AppHost`. A Hardhat node újraindításakor a szerződés elvész, ezért a telepítést újra le kell futtatni, majd a `web`-et újraindítani.
+
+
 
 ## 7. Ismert hiányosságok és megfigyelések
 
@@ -175,4 +184,7 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 - **Összegtartomány.** Az egyenlegek centben, 0 és 2^40 (kb. 11 milliárd egység) között lehetnek, legfeljebb 2^20 számla fér egy fába. A határokat az AIR is kikényszeríti.
 - **A régi auditok** (a zk-STARK bevezetése előttiek) `TreeDepth = 0` értékűek, a hitelesítő oldal ezeket külön jelzi, és új auditot kér.
 - **Holt kód:** a `ProofResponse.cs`, `PedersenHelper.cs`, `calc/src/handlers.rs`, az üres `web/SolvencyProofContext.cs` és a `Pages/Component.razor` fájlok eltávolításra kerültek.
+- **Belső hibák nem jutnak ki a felhasználóhoz.** A UI oldalak (`ProofGeneration`, `ClientVerification`, `Home`) általános üzenetet mutatnak, a részletes kivételt a `ILogger` a naplóba írja. A Rust prover is általános szöveget küld (500 és a verifikáció hibája esetén), a részletek a szerver `stderr`-jén vannak. A fejlesztői `UseMigrationsEndPoint` csak fejlesztési módban fut.
+- **Naplózás (Serilog).** A konzol és a `web/logs/solvencyproof-*.log` (Information, 30 nap) mellett a `web/logs/telemetry-*.log` (Debug, 14 nap) részletes naplót ír, a tulajdonságokkal együtt. A telemetria-napló belső működési részleteket tartalmaz, ezért szerveroldalon kell tartani, és nem szabad oda egyenlegeket vagy titkokat írni.
 - **Be van drótozva** a `Hardhat:PrivateKey` az `appsettings.json`-ban. Ez most a Hardhat nyilvános teszt-kulcsa, éles környezetben titokkezelőből kell olvasni.
+

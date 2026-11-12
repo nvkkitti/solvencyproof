@@ -4,6 +4,7 @@
 @using SolvencyProof.Services
 @using Microsoft.EntityFrameworkCore
 @inject IAuditProverService AuditProver
+@inject ILogger<ProofGeneration> Logger
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
 
 <PageTitle>Bizonyítás generálása</PageTitle>
@@ -104,9 +105,9 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Hiba: {ex}");
+            Logger.LogError(ex, "A bizonyítás generálása sikertelen (lépés: {Step}).", _currentStep);
             _failedStep = _currentStep;
-            _errorMessage = $"A bizonyítás generálása sikertelen: {ex.Message}";
+            _errorMessage = "A bizonyítás generálása sikertelen. Részletek a naplóban.";
         }
         finally
         {
