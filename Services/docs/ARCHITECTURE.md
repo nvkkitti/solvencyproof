@@ -68,7 +68,6 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | Fájl | Felelősség |
 |---|---|
 | `Poseidon2Goldilocks.cs`, `Poseidon2GoldilocksConstants.g.cs` | **A Rust prover hash-ének portja** (Poseidon2, Goldilocks, 12 széles). A konstansokat a Rust forrásból generálja a `write_csharp_constants` teszt, kézzel nem szerkesztendők. Itt van az eszköz-elkötelezettség (`CommitAssets`) és a digest/testelem kódolás is. |
-| `PedersenHelper.cs` | **Már nincs használatban.** Pedersen-elköteleződések a secp256k1 görbén (BouncyCastle). Az audit a bizonyítás és az elkötelezettség STARK-barát, Poseidon2-alapú változatát használja. |
 | `CryptoHelper.cs` | Kriptográfiailag biztonságos véletlen bájtok (`RandomNumberGenerator`), ebből készül a vakító faktor. |
 
 ### 2.3 `web/Models/` – adatmodellek és DTO-k
@@ -76,12 +75,11 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | Fájl | Felelősség |
 |---|---|
 | `Account.cs` | Ügyfélszámla: `Id`, `Balance`, `MerkleLeafSalt`, `LastUpdate`. Ebből lesz a Merkle-levél. |
-| `SolvencyAudit.cs` | Egy audit rekordja: időbélyeg, `TotalLiabilities`, `TotalAssets`, `MerkleRoot` (a fa gyökere, 32 bájt), `CommitmentCv` (az eszköz-elkötelezettség `C_A`), `ZkProof` (a teljes zk-STARK bizonyíték), `TreeDepth`, `Status`. A `CommitmentCt` és `CommitmentCDelta` már nem használt, a régi sorok miatt maradt. Itt van az `AuditStatus` enum is. |
+| `SolvencyAudit.cs` | Egy audit rekordja: időbélyeg, `TotalLiabilities`, `TotalAssets`, `MerkleRoot` (a fa gyökere, 32 bájt), `CommitmentCv` (az eszköz-elkötelezettség `C_A`), `ZkProof` (a teljes zk-STARK bizonyíték), `TreeDepth`, `Status`. Itt van az `AuditStatus` enum is. |
 | `CryptographicSecret.cs` | A titkos anyag külön táblában: a Data Protectionnel titkosított vakító faktor (`BlindingFactorR`), 1:1 kapcsolatban az audittal. Azért külön, hogy a publikus státusz-végpont ne adhassa ki véletlenül. |
 | `VerificationQuery.cs` | Naplózza, hogy ki mikor kérdezett rá egy azonosítóra (`ClientVerification` oldal). |
 | `AuditProgressReport.cs` | A pipeline haladásjelentése a UI felé (`StepIndex`, `Message`, `TotalSteps = 4`). Itt van az `AuditProofResult` rekord is (tranzakció hash + Merkle-gyökér). |
 | `EvmProofResponse.cs` | A Rust szerver válasza: `proof_elements[]` (a bizonyíték SHA-256 digestje a szerződésnek), `public_inputs[]` (C_A, gyökér, nonce), `proof` (a teljes bizonyíték), `depth`, `verified`. |
-| `ProofResponse.cs` | Szerkezetileg azonos az `EvmProofResponse`-szal; valószínűleg maradvány. |
 
 ### 2.4 `web/` gyökér és konfiguráció
 
@@ -89,7 +87,6 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 |---|---|
 | `Program.cs` | Belépési pont. DI-regisztráció (DbContextFactory, `IAuditProverService`, DataProtection, `ZkProofClient`, `HardhatProofSubmitterService`), induláskor `Database.Migrate()`, Blazor beállítás. Két minimal API végpont: `POST /api/audit/generate` (létrehoz egy `Prepared` auditot, háttérben elindítja a szolgáltatást, `202 Accepted`) és `GET /api/audit/status/{id}` (folyamatban: csak a státusz; `VerifiedOnChain`: a nyilvános bizonyíték: gyökér, eszköz-elkötelezettség, mélység, zk-STARK bizonyíték hexadecimálisan, **az eszközök és a kötelezettségek nélkül**). |
 | `Data/SolvencyProofContextFactory.cs` | Design-time factory az `dotnet ef` parancsokhoz, fix LocalDB connection stringgel. |
-| `SolvencyProofContext.cs` | **Üres fájl**, törölhető (a valódi context a `Services/` alatt van). |
 | `SolvencyContractAbi.json` | A `ProofOfSolvency` szerződés ABI-ja, a `HardhatProofSubmitterService` tölti be. |
 | `appsettings.json`, `appsettings.Development.json` | Connection string és a `Hardhat` szekció (RPC URL, privát kulcs, szerződéscím). |
 | `SolvencyProof.csproj`, `SolvencyProof.slnx`, `dotnet-tools.json` | Projekt-, solution- és eszközleírók (EF tool). |
@@ -120,7 +117,6 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | `Pages/AccountPages/` (`Index`, `Create`, `Details`, `Edit`, `Delete`) | Scaffoldolt CRUD oldalak az `Account` táblához. |
 | `Pages/SolvencyAuditPages/` (`Index`, `Create`, `Details`, `Edit`, `Delete`) | Ugyanez a `SolvencyAudit` táblához. |
 | `Pages/Error.razor`, `NotFound.razor` | Hiba- és 404 oldal. |
-| `Pages/Component.razor` | Üres fájl. |
 
 ---
 
@@ -133,7 +129,6 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 | `src/air.rs` | **Az AIR.** Minden sor egy teljes Poseidon2 permutációt tartalmaz, a sor típusát periodikus fázisoszlopok adják (levél, csomópont, elköteleződés, kitöltés). Kikényszeríti: minden levél érvényes útvonala a nyilvános gyökérig, a részösszegek helyességét, a 40 bites egyenleg-tartományt, `C_A = Poseidon2(a, r)` és `a − T ∈ [0, 2^62)` fennállását. |
 | `src/trace.rs` | A titkos tanúból felépíti az AIR trace-ét és a nyilvános bemeneteket. |
 | `src/stark.rs` | A zero-knowledge konfiguráció (Goldilocks, Poseidon2 Merkle-elköteleződés, `HidingFriPcs`, OS-entrópiából induló maszkok), `prove_solvency` és `verify_solvency`, valamint a támadási tesztek (hamis nyilvános bemenet, hamisított tartomány, manipulált bizonyíték). |
-| `src/handlers.rs` | Egy korábbi, placeholder handler. A `main.rs` nem hivatkozik rá (nincs `mod handlers`), ezért nem fordul bele. |
 | `Cargo.toml`, `Cargo.lock` | Függőségek és verziórögzítés (a Plonky3 pontos verzióra rögzítve, mert az API még mozog). |
 | `.vscode/launch.json`, `settings.json`, `.gitignore`, `.DS_Store` | Szerkesztő- és repóbeállítások. A `.DS_Store` macOS-szemét. |
 
@@ -179,5 +174,5 @@ A lépések sorszámozása megegyezik az `AuditProgressReport.StepIndex` érték
 - **Az eszközök forrása.** A pipeline az `audit.TotalAssets` értékét az ügyfélegyenlegek összegéből veszi, ezért a ráta egy audit után mindig 100%. Valódi tartalékhoz (például tartalékcímek feletti aláírás vagy külső attesztáció) kötött eszközforrás még nincs.
 - **Összegtartomány.** Az egyenlegek centben, 0 és 2^40 (kb. 11 milliárd egység) között lehetnek, legfeljebb 2^20 számla fér egy fába. A határokat az AIR is kikényszeríti.
 - **A régi auditok** (a zk-STARK bevezetése előttiek) `TreeDepth = 0` értékűek, a hitelesítő oldal ezeket külön jelzi, és új auditot kér.
-- **Holt kód:** `ProofResponse.cs`, `PedersenHelper.cs`, `calc/src/handlers.rs`, az üres `web/SolvencyProofContext.cs` és a `Pages/Component.razor`.
+- **Holt kód:** a `ProofResponse.cs`, `PedersenHelper.cs`, `calc/src/handlers.rs`, az üres `web/SolvencyProofContext.cs` és a `Pages/Component.razor` fájlok eltávolításra kerültek.
 - **Be van drótozva** a `Hardhat:PrivateKey` az `appsettings.json`-ban. Ez most a Hardhat nyilvános teszt-kulcsa, éles környezetben titokkezelőből kell olvasni.

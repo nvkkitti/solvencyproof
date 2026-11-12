@@ -139,8 +139,6 @@ namespace SolvencyProof.Services
             var publicInputs = proofData.PublicInputs.Select(HardhatProofSubmitterService.ParseUint256).ToArray();
 
             audit.CommitmentCv = assetCommitment;
-            audit.CommitmentCt = Array.Empty<byte>();
-            audit.CommitmentCDelta = Array.Empty<byte>();
             audit.ZkProof = Convert.FromHexString(proofData.Proof[2..]);
             db.CryptographicSecrets.Add(new CryptographicSecret
             {

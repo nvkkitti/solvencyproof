@@ -48,16 +48,6 @@ else
                     <ValidationMessage For="() => CommitmentCvBase64" class="text-danger" />
                 </div>
                 <div class="mb-3">
-                    <label for="commitmentct" class="form-label">CommitmentCt (base64):</label>
-                    <InputText id="commitmentct" @bind-Value="CommitmentCtBase64" class="form-control" />
-                    <ValidationMessage For="() => CommitmentCtBase64" class="text-danger" />
-                </div>
-                <div class="mb-3">
-                    <label for="commitmentcdelta" class="form-label">CommitmentCDelta (base64):</label>
-                    <InputText id="commitmentcdelta" @bind-Value="CommitmentCDeltaBase64" class="form-control" />
-                    <ValidationMessage For="() => CommitmentCDeltaBase64" class="text-danger" />
-                </div>
-                <div class="mb-3">
                     <label for="zkproof" class="form-label">ZkProof (base64):</label>
                     <InputText id="zkproof" @bind-Value="ZkProofBase64" class="form-control" />
                     <ValidationMessage For="() => ZkProofBase64" class="text-danger" />
@@ -97,8 +87,6 @@ else
     // string-backed properties for byte[] fields
     private string MerkleRootBase64 { get; set; } = string.Empty;
     private string CommitmentCvBase64 { get; set; } = string.Empty;
-    private string CommitmentCtBase64 { get; set; } = string.Empty;
-    private string CommitmentCDeltaBase64 { get; set; } = string.Empty;
     private string ZkProofBase64 { get; set; } = string.Empty;
     private string SecretDisplay { get; set; } = string.Empty;
 
@@ -120,12 +108,6 @@ else
         if (SolvencyAudit.CommitmentCv is not null && SolvencyAudit.CommitmentCv.Length > 0)
             CommitmentCvBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCv);
 
-        if (SolvencyAudit.CommitmentCt is not null && SolvencyAudit.CommitmentCt.Length > 0)
-            CommitmentCtBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCt);
-
-        if (SolvencyAudit.CommitmentCDelta is not null && SolvencyAudit.CommitmentCDelta.Length > 0)
-            CommitmentCDeltaBase64 = Convert.ToBase64String(SolvencyAudit.CommitmentCDelta);
-
         if (SolvencyAudit.ZkProof is not null && SolvencyAudit.ZkProof.Length > 0)
             ZkProofBase64 = Convert.ToBase64String(SolvencyAudit.ZkProof);
 
@@ -145,16 +127,6 @@ else
             SolvencyAudit.CommitmentCv = Convert.FromBase64String(CommitmentCvBase64);
         else
             SolvencyAudit.CommitmentCv = Array.Empty<byte>();
-
-        if (!string.IsNullOrWhiteSpace(CommitmentCtBase64))
-            SolvencyAudit.CommitmentCt = Convert.FromBase64String(CommitmentCtBase64);
-        else
-            SolvencyAudit.CommitmentCt = Array.Empty<byte>();
-
-        if (!string.IsNullOrWhiteSpace(CommitmentCDeltaBase64))
-            SolvencyAudit.CommitmentCDelta = Convert.FromBase64String(CommitmentCDeltaBase64);
-        else
-            SolvencyAudit.CommitmentCDelta = Array.Empty<byte>();
 
         if (!string.IsNullOrWhiteSpace(ZkProofBase64))
             SolvencyAudit.ZkProof = Convert.FromBase64String(ZkProofBase64);

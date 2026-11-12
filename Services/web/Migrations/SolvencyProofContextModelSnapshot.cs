@@ -92,14 +92,6 @@ namespace SolvencyProof.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<byte[]>("CommitmentCDelta")
-                        .IsRequired()
-                        .HasColumnType("varbinary(max)");
-
-                    b.Property<byte[]>("CommitmentCt")
-                        .IsRequired()
-                        .HasColumnType("varbinary(max)");
-
                     b.Property<byte[]>("CommitmentCv")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");

@@ -25,8 +25,6 @@ namespace SolvencyProof.Models
         [MaxLength(32)] // Limit byte array length to 32 bytes (32 bájtos korlátozás)
         public byte[] MerkleRoot { get; set; } = Array.Empty<byte>(); // Root digest of the liabilities sum tree (A kötelezettség-összegfa gyökere)
         public byte[] CommitmentCv { get; set; } = Array.Empty<byte>(); // Poseidon2 commitment to the assets, C_A (Az eszközök Poseidon2 elkötelezettsége)
-        public byte[] CommitmentCt { get; set; } = Array.Empty<byte>(); // Unused since the zk-STARK proves a >= T itself, kept for old rows (Már nem használt, régi sorok miatt maradt)
-        public byte[] CommitmentCDelta { get; set; } = Array.Empty<byte>(); // Unused, see CommitmentCt (Már nem használt)
         public byte[] ZkProof { get; set; } = Array.Empty<byte>(); // The full serialized zk-STARK proof (A teljes zk-STARK bizonyíték)
 
         // Depth of the liabilities tree the proof was made for; 0 for audits made before the zk-STARK (A bizonyítás fájának mélysége, 0 a régi auditoknál)

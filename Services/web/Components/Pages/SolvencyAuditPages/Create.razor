@@ -41,16 +41,6 @@
                 <ValidationMessage For="() => CommitmentCvBase64" class="text-danger" /> 
             </div>        
             <div class="mb-3">
-                <label for="commitmentct" class="form-label">CommitmentCt (Base64):</label> 
-                <InputText id="commitmentct" @bind-Value="CommitmentCtBase64" class="form-control" /> 
-                <ValidationMessage For="() => CommitmentCtBase64" class="text-danger" /> 
-            </div>        
-            <div class="mb-3">
-                <label for="commitmentcdelta" class="form-label">CommitmentCDelta (Base64):</label> 
-                <InputText id="commitmentcdelta" @bind-Value="CommitmentCDeltaBase64" class="form-control" /> 
-                <ValidationMessage For="() => CommitmentCDeltaBase64" class="text-danger" /> 
-            </div>        
-            <div class="mb-3">
                 <label for="zkproof" class="form-label">ZkProof (Base64):</label> 
                 <InputText id="zkproof" @bind-Value="ZkProofBase64" class="form-control" /> 
                 <ValidationMessage For="() => ZkProofBase64" class="text-danger" /> 
@@ -85,18 +75,6 @@
     {
         get => SolvencyAudit?.CommitmentCv != null && SolvencyAudit.CommitmentCv.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCv) : string.Empty;
         set => SolvencyAudit.CommitmentCv = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
-    }
-
-    private string CommitmentCtBase64
-    {
-        get => SolvencyAudit?.CommitmentCt != null && SolvencyAudit.CommitmentCt.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCt) : string.Empty;
-        set => SolvencyAudit.CommitmentCt = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
-    }
-
-    private string CommitmentCDeltaBase64
-    {
-        get => SolvencyAudit?.CommitmentCDelta != null && SolvencyAudit.CommitmentCDelta.Length > 0 ? Convert.ToBase64String(SolvencyAudit.CommitmentCDelta) : string.Empty;
-        set => SolvencyAudit.CommitmentCDelta = string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
     }
 
     private string ZkProofBase64
