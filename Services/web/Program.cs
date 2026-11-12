@@ -26,6 +26,7 @@ public partial class Program
 
         builder.Services.AddHttpClient<ZkProofClient>();
         builder.Services.AddSingleton<HardhatProofSubmitterService>();
+        builder.Services.AddScoped<AccountInclusionVerifier>();
 
 
         var app = builder.Build();
@@ -96,20 +97,18 @@ public partial class Program
                 });
             }
 
-            // If the audit completed successfully, return the complete public proof (Ha az audit sikeresen befejeződött, visszaadjuk a teljes publikus bizonyítékot)
+            // If the audit completed successfully, return the public proof: only public data, never the assets or the liabilities
+            // (Ha az audit sikeres, a publikus bizonyítékot adjuk vissza: csak nyilvános adatot, az eszközöket és kötelezettségeket soha)
             return Results.Ok(new
             {
                 Id = audit.Id,
                 Status = audit.Status.ToString(),
                 Timestamp = audit.Timestamp,
-                TotalLiabilities = audit.TotalLiabilities,
-                TotalAssets = audit.TotalAssets,
+                TreeDepth = audit.TreeDepth,
 
                 // Convert cryptographic byte arrays to hexadecimal strings (Kriptográfiai bájttömbök konvertálása Hexadecimális stringgé)
                 MerkleRoot = Convert.ToHexString(audit.MerkleRoot).ToLower(),
-                CommitmentCv = Convert.ToHexString(audit.CommitmentCv).ToLower(),
-                CommitmentCt = Convert.ToHexString(audit.CommitmentCt).ToLower(),
-                CommitmentCDelta = Convert.ToHexString(audit.CommitmentCDelta).ToLower(),
+                AssetsCommitment = Convert.ToHexString(audit.CommitmentCv).ToLower(),
                 ZkProof = Convert.ToHexString(audit.ZkProof).ToLower()
             });
         });

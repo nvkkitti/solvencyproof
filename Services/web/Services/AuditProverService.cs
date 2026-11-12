@@ -77,47 +77,58 @@ namespace SolvencyProof.Services
             }
 
             audit.Status = AuditStatus.Proving;
+
+            // The liabilities sum tree: Poseidon2 leaves, every node commits to the sum below it (A kötelezettség-összegfa)
+            List<ZkLeaf> zkLeaves = accounts.Select(MerkleTreeBuilder.ToLeaf).ToList();
+            SumTree tree = MerkleTreeBuilder.Build(zkLeaves);
+            byte[] localMerkleRoot = MerkleTreeBuilder.RootBytes(tree);
+
+            // The customer balances are the liabilities; the pipeline's asset figure is their sum, as before (Az ügyfélegyenlegek a kötelezettségek)
+            audit.TotalLiabilities = accounts.Sum(account => account.Balance);
             audit.TotalAssets = accounts.Sum(account => account.Balance);
-            byte[] localMerkleRoot = MerkleTreeBuilder.BuildTreeAndGetRoot(accounts);
             audit.MerkleRoot = localMerkleRoot;
+            audit.TreeDepth = tree.Depth;
             await db.SaveChangesAsync(cancellationToken);
 
-            // Convert the amounts (decimal) to the smallest indivisible unit (for example, an integer) (Az összegeket (decimal) át kell váltani a legkisebb oszthatatlan egységre (pl. egész számra)).
-            // Assume that our value uses 8 decimal places (Tegyük fel, hogy az értékünk 8 tizedesjegyet használ)
-            long totalLiabilitiesInSmallestUnit = checked((long)(audit.TotalLiabilities * 100_000_000m));
-            long totalAssetsInSmallestUnit = checked((long)(audit.TotalAssets * 100_000_000m));
+            // Amounts are proven in cents (Az összegeket centben bizonyítjuk)
+            ulong totalAssetsInSmallestUnit = MerkleTreeBuilder.ToSmallestUnit(audit.TotalAssets, MerkleTreeBuilder.AssetBits);
 
-            // 1. Liabilities (C_T) (Kötelezettségek (C_T))
-            byte[] liabilityCommitment = PedersenHelper.CommitDeterministic(totalLiabilitiesInSmallestUnit);
-
-            // 2. Assets (C_v) with the generated blinding factor (r) (Fedezet (C_v) a generált vakító tényezővel (r))
+            // The assets commitment C_A = Poseidon2(assets, r) with a fresh 256-bit blinding factor r. It is computed here and
+            // handed to the prover, which must reproduce it (Az eszközök elkötelezettsége, amit a bizonyítónak is elő kell állítania)
             byte[] blindingFactor = CryptoHelper.GenerateRandomBytes(32);
-            byte[] assetCommitment = PedersenHelper.Commit(totalAssetsInSmallestUnit, blindingFactor);
-
-            // 3. Difference using homomorphic subtraction (C_Delta) (Különbség homomorf kivonással (C_Delta))
-            byte[] differenceCommitment = PedersenHelper.SubtractCommitments(assetCommitment, liabilityCommitment);
+            ulong[] blinding = Poseidon2Goldilocks.FieldElementsFromBytes(blindingFactor);
+            byte[] assetCommitment = Poseidon2Goldilocks.CommitAssets(totalAssetsInSmallestUnit, blinding);
 
             // Step 2: ask the Rust Axum prover for the zk-STARK proof (2. lépés: zk-STARK bizonyíték kérése a Rust Axum szervertől)
             Report(progress, 2, "Merkle-fa és zk-STARK bizonyíték kérése a Rust szervertől (127.0.0.1:3000)...");
             string institutionId = audit.Id.ToString();
-            string[] leaves = accounts
-                .Select(account => "0x" + Convert.ToHexString(MerkleTreeBuilder.GenerateLeafHash(account)).ToLowerInvariant())
-                .ToArray();
+            string merkleRootHex = ToHex(localMerkleRoot);
+            string commitmentHex = ToHex(assetCommitment);
 
+            // The witness goes to the institution's own prover over loopback; only the proof and public inputs leave it
+            // (A tanú az intézmény saját bizonyítójához megy loopbacken, csak a bizonyíték és a nyilvános bemenetek hagyják el)
             EvmProofResponse proofData = await _zkProofClient.GenerateProofAsync(
-                institutionId,
-                checked((ulong)totalAssetsInSmallestUnit),
-                checked((ulong)totalLiabilitiesInSmallestUnit),
-                leaves,
+                new ProofRequest(
+                    institutionId,
+                    totalAssetsInSmallestUnit,
+                    blinding,
+                    commitmentHex,
+                    merkleRootHex,
+                    zkLeaves.Select(leaf => new ZkLeafRequest(leaf.Id, leaf.Salt, leaf.Balance)).ToArray()),
                 cancellationToken);
 
-            if (proofData.ProofElements.Length == 0 || proofData.PublicInputs.Length < 2)
+            if (proofData.ProofElements.Length == 0 || proofData.PublicInputs.Length < 2 || !proofData.Verified)
             {
-                throw new InvalidOperationException("A Rust szerver hiányos bizonyítékot adott vissza.");
+                throw new InvalidOperationException("A Rust szerver hiányos vagy nem ellenőrzött bizonyítékot adott vissza.");
             }
 
-            // The root computed by Rust must match the one computed here (A Rust által számolt gyökérnek egyeznie kell a helyben számolttal)
-            string merkleRootHex = "0x" + Convert.ToHexString(localMerkleRoot).ToLowerInvariant();
+            // The commitment and the root computed by Rust must match the ones computed here (A Rust által számolt értékeknek egyezniük kell a helyben számoltakkal)
+            if (!string.Equals(proofData.PublicInputs[0], commitmentHex, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"A Rust és a C# eszköz-elkötelezettsége eltér: {proofData.PublicInputs[0]} != {commitmentHex}");
+            }
+
             if (!string.Equals(proofData.PublicInputs[1], merkleRootHex, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
@@ -127,12 +138,10 @@ namespace SolvencyProof.Services
             var proofElements = proofData.ProofElements.Select(HardhatProofSubmitterService.ParseUint256).ToArray();
             var publicInputs = proofData.PublicInputs.Select(HardhatProofSubmitterService.ParseUint256).ToArray();
 
-            audit.CommitmentCt = liabilityCommitment;
             audit.CommitmentCv = assetCommitment;
-            audit.CommitmentCDelta = differenceCommitment;
-            audit.ZkProof = proofData.ProofElements
-                .SelectMany(element => Convert.FromHexString(element[2..]))
-                .ToArray();
+            audit.CommitmentCt = Array.Empty<byte>();
+            audit.CommitmentCDelta = Array.Empty<byte>();
+            audit.ZkProof = Convert.FromHexString(proofData.Proof[2..]);
             db.CryptographicSecrets.Add(new CryptographicSecret
             {
                 Id = Guid.NewGuid(),
@@ -143,8 +152,7 @@ namespace SolvencyProof.Services
 
             // Step 3: send the transaction to the Hardhat chain (3. lépés: tranzakció küldése a Hardhat láncra)
             Report(progress, 3, "submitAndVerifyProof tranzakció küldése a Hardhat láncra (127.0.0.1:8545)...");
-            byte[] institutionIdBytes = System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(institutionId));
+            byte[] institutionIdBytes = HardhatProofSubmitterService.ComputeInstitutionId(audit.Id);
             string transactionHash = await _proofSubmitter.SendProofAsync(institutionIdBytes, proofElements, publicInputs);
 
             // Step 4: the contract verifies the proof on-chain via MockStarkVerifier (4. lépés: on-chain ellenőrzés)
@@ -157,6 +165,8 @@ namespace SolvencyProof.Services
             Report(progress, AuditProgressReport.TotalSteps + 1, $"Az audit sikeres. Tranzakciós hash: {transactionHash}");
             return new AuditProofResult(transactionHash, merkleRootHex);
         }
+
+        private static string ToHex(byte[] bytes) => "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
 
         private void Report(IProgress<AuditProgressReport>? progress, int stepIndex, string message)
         {

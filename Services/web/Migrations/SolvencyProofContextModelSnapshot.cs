@@ -16,7 +16,7 @@ namespace SolvencyProof.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -120,6 +120,9 @@ namespace SolvencyProof.Migrations
 
                     b.Property<decimal>("TotalLiabilities")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TreeDepth")
+                        .HasColumnType("int");
 
                     b.Property<byte[]>("ZkProof")
                         .IsRequired()

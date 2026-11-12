@@ -1,8 +1,11 @@
 ﻿@page "/clientverification"
 @rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
+@using SolvencyProof.Helpers
 @using SolvencyProof.Models
+@using SolvencyProof.Services
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject AccountInclusionVerifier InclusionVerifier
 
 <PageTitle>Azonosító hitelesítése</PageTitle>
 
@@ -40,6 +43,61 @@
             <p>@_verificationResult</p>
         </div>
     }
+
+    @if (_inclusion?.Proof is { } proof)
+    {
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Merkle-összegfa bizonyíték</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Audit</dt>
+                    <dd class="col-sm-9 font-monospace">@_inclusion.AuditId</dd>
+                    <dt class="col-sm-3">Levél hash</dt>
+                    <dd class="col-sm-9 font-monospace text-break">@ToHex(proof.Leaf.Digest)</dd>
+                    <dt class="col-sm-3">Újraszámolt gyökér</dt>
+                    <dd class="col-sm-9 font-monospace text-break">@ToHex(_inclusion.RecomputedRoot)</dd>
+                    <dt class="col-sm-3">Blokkláncon lévő gyökér</dt>
+                    <dd class="col-sm-9 font-monospace text-break">@ToHex(_inclusion.OnChainRoot)</dd>
+                    <dt class="col-sm-3">zk-STARK bizonyíték</dt>
+                    <dd class="col-sm-9">
+                        @switch (_inclusion.StarkProofValid)
+                        {
+                            case true:
+                                <span class="text-success fw-bold">&#10003; Érvényes: az eszközök fedezik a kötelezettségeket (egyik érték sem nyilvános)</span>
+                                break;
+                            case false:
+                                <span class="text-danger fw-bold">&#10007; Érvénytelen</span>
+                                break;
+                            default:
+                                <span class="text-muted">Nem ellenőrizhető (a bizonyító szolgáltatás nem érhető el)</span>
+                                break;
+                        }
+                    </dd>
+                </dl>
+
+                <h6 class="mt-3">Útvonal a gyökérig (@proof.Path.Count lépés)</h6>
+                <p class="text-muted small">
+                    A gyökér hash-e az alatta lévő egyenlegek összegét is tartalmazza, ezért az útvonal minden testvér-csomópontjánál látszik az alatta lévő részösszeg is.
+                </p>
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>#</th><th>Testvér oldala</th><th>Testvér hash</th><th>Testvér részösszeg</th></tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < proof.Path.Count; i++)
+                        {
+                            <tr>
+                                <td>@(i + 1)</td>
+                                <td>@(proof.Path[i].IsRightChild ? "bal" : "jobb")</td>
+                                <td class="font-monospace text-break">@ToHex(proof.Path[i].Sibling.Digest)</td>
+                                <td>@ToAmount(proof.Path[i].Sibling.Sum)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -47,9 +105,20 @@
     private bool _isVerifying = false;
     private string? _verificationResult;
     private bool _isIncluded = false;
+    private InclusionVerificationResult? _inclusion;
+
+    private static string ToHex(byte[]? bytes) =>
+        bytes is null ? "-" : "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
+
+    private static string ToHex(ulong[] digest) => ToHex(Poseidon2Goldilocks.DigestToBytes(digest));
+
+    private static string ToAmount(ulong smallestUnit) =>
+        (smallestUnit / MerkleTreeBuilder.AmountScale).ToString("N2");
 
     private async Task VerifyAccountAsync()
     {
+        _inclusion = null;
+
         if (string.IsNullOrWhiteSpace(_accountId))
         {
             _verificationResult = "Kérem, adjon meg egy érvényes azonosítót!";
@@ -71,10 +140,6 @@
         try
         {
             await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
-            bool accountExists = await db.Account
-                .AsNoTracking()
-                .AnyAsync(account => account.Id == accountId);
-
             db.VerificationQueries.Add(new VerificationQuery
             {
                 AccountId = accountId,
@@ -82,16 +147,32 @@
             });
             await db.SaveChangesAsync();
 
-            if (accountExists)
+            _inclusion = await InclusionVerifier.VerifyAsync(accountId);
+            _isIncluded = _inclusion.Status == InclusionStatus.Verified;
+            _verificationResult = _inclusion.Status switch
             {
-                _isIncluded = true;
-                _verificationResult = $"Sikeres verifikáció! Az Ön azonosítója ({accountId}) szerepel a nyilvántartott számlák között.";
-            }
-            else
-            {
-                _isIncluded = false;
-                _verificationResult = "Nem található azonosító. Kérjük, ellenőrizze a megadott adatokat.";
-            }
+                InclusionStatus.Verified =>
+                    $"Sikeres verifikáció! Az Ön azonosítója ({accountId}) szerepel a blokkláncon rögzített Merkle-fában: a levéltől újraszámolt gyökér megegyezik a láncon lévő gyökérrel.",
+                InclusionStatus.AccountNotFound =>
+                    "Nem található azonosító. Kérjük, ellenőrizze a megadott adatokat.",
+                InclusionStatus.NoVerifiedAudit =>
+                    "Még nincs a blokkláncon megerősített audit, így nincs mivel összevetni a Merkle-gyökeret.",
+                InclusionStatus.LegacyAudit =>
+                    $"A legutóbbi audit ({_inclusion.AuditId}) a zk-STARK bizonyítás bevezetése előtti, más fát használt. Indítson új auditot.",
+                InclusionStatus.RootNotOnChain =>
+                    $"A(z) {_inclusion.AuditId} audithoz nem található Merkle-gyökér a blokkláncon.",
+                InclusionStatus.RootMismatch when _inclusion.AccountChangedSinceAudit =>
+                    "A bizonyíték nem egyezik a blokkláncon lévő gyökérrel: a számlaadatok az audit óta megváltoztak.",
+                InclusionStatus.StarkProofInvalid =>
+                    "Az Ön számlája szerepel a blokkláncon rögzített fában, de az audit zk-STARK bizonyítéka nem ellenőrizhető.",
+                _ =>
+                    "A bizonyíték nem egyezik a blokkláncon lévő gyökérrel. A számla nem szerepel a rögzített fában."
+            };
+        }
+        catch (Exception ex)
+        {
+            _isIncluded = false;
+            _verificationResult = $"Az ellenőrzés nem sikerült: {ex.Message}";
         }
         finally
         {

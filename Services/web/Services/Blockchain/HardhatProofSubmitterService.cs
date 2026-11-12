@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.Contracts;
 using Nethereum.Hex.HexTypes;
 using Nethereum.RPC.Eth.DTOs;
@@ -10,11 +11,26 @@ using Nethereum.Web3.Accounts;
 
 namespace SolvencyProof.Services.Blockchain;
 
+// Mirrors the SolvencyVerified event of the ProofOfSolvency contract (A ProofOfSolvency szerződés SolvencyVerified eseményének tükörképe)
+[Event("SolvencyVerified")]
+public sealed class SolvencyVerifiedEventDto : IEventDTO
+{
+    [Parameter("bytes32", "institutionId", 1, true)]
+    public byte[] InstitutionId { get; set; } = [];
+
+    [Parameter("uint256", "timestamp", 2, false)]
+    public BigInteger Timestamp { get; set; }
+
+    [Parameter("bytes32", "liabilitiesMerkleRoot", 3, false)]
+    public byte[] LiabilitiesMerkleRoot { get; set; } = [];
+}
+
 public sealed class HardhatProofSubmitterService
 {
     private const string AbiFileName = "SolvencyContractAbi.json";
 
     private readonly Account _account;
+    private readonly string _contractAddress;
     private readonly Web3 _web3;
     private readonly Function _submitFunction;
 
@@ -33,6 +49,7 @@ public sealed class HardhatProofSubmitterService
         }
 
         _account = new Account(privateKey);
+        _contractAddress = contractAddress;
         _web3 = new Web3(_account, rpcUrl);
         _submitFunction = _web3.Eth.GetContract(LoadAbi(), contractAddress)
             .GetFunction("submitAndVerifyProof");
@@ -70,6 +87,45 @@ public sealed class HardhatProofSubmitterService
             throw new InvalidOperationException(
                 $"Az on-chain ellenőrzés sikertelen (a tranzakció visszagörgetődött): {transactionHash}");
         }
+
+        // A transaction sent to an address without contract code also succeeds, so the receipt must contain the SolvencyVerified event of our contract (A kód nélküli címre küldött tranzakció is sikeres, ezért a nyugtának tartalmaznia kell a szerződésünk SolvencyVerified eseményét)
+        bool verifiedEventEmitted = receipt.DecodeAllEvents<SolvencyVerifiedEventDto>()
+            .Any(log => string.Equals(log.Log.Address, _contractAddress, StringComparison.OrdinalIgnoreCase));
+        if (!verifiedEventEmitted)
+        {
+            throw new InvalidOperationException(
+                $"A tranzakció lefutott, de a(z) {_contractAddress} címen lévő szerződés nem bocsátott ki SolvencyVerified eseményt (a szerződés valószínűleg nincs telepítve): {transactionHash}");
+        }
+    }
+
+    /// <summary>
+    /// Reads the liabilities Merkle root the contract emitted for an audit, straight from the chain logs (Az audithoz a szerződés által kibocsátott Merkle-gyökér kiolvasása közvetlenül a lánc naplóiból).
+    /// Returns null when no SolvencyVerified event exists for the audit (Null, ha nincs SolvencyVerified esemény az audithoz).
+    /// </summary>
+    public async Task<byte[]?> GetVerifiedMerkleRootAsync(Guid auditId)
+    {
+        byte[] institutionId = ComputeInstitutionId(auditId);
+        Event<SolvencyVerifiedEventDto> solvencyVerified = _web3.Eth.GetEvent<SolvencyVerifiedEventDto>(_contractAddress);
+        NewFilterInput filter = solvencyVerified.CreateFilterInput(
+            new object[] { institutionId },
+            BlockParameter.CreateEarliest(),
+            BlockParameter.CreateLatest());
+
+        List<EventLog<SolvencyVerifiedEventDto>> logs = await solvencyVerified.GetAllChangesAsync(filter);
+
+        // An audit id is submitted once, but if it were repeated the latest event is the authoritative one (Egy audit azonosító egyszer kerül beküldésre, ismétlésnél a legutóbbi esemény az irányadó)
+        return logs
+            .OrderByDescending(log => log.Log.BlockNumber.Value)
+            .ThenByDescending(log => log.Log.LogIndex.Value)
+            .Select(log => log.Event.LiabilitiesMerkleRoot)
+            .FirstOrDefault();
+    }
+
+    // The contract identifies an institution by SHA-256 of the audit id (A szerződés az intézményt az audit azonosító SHA-256 hash-ével azonosítja)
+    public static byte[] ComputeInstitutionId(Guid auditId)
+    {
+        return System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(auditId.ToString()));
     }
 
     // Parses a 0x-prefixed big-endian hex string as an unsigned uint256 (0x előtagú, big-endian hex előjel nélküli értelmezése)

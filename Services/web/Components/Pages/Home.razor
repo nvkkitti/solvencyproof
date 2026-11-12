@@ -1,117 +1,497 @@
 @page "/"
+@rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
 @using SolvencyProof.Models
+@using SolvencyProof.Services
 @inject IDbContextFactory<SolvencyProofContext> DbFactory
+@inject IAuditProverService AuditProver
+@inject NavigationManager NavigationManager
 
 <PageTitle>Fizetőképesség igazolása</PageTitle>
 
-<div class="container-fluid mt-2">
-    <!-- Fő szekció -->
-    <div class="p-5 mb-3 bg-light rounded-3 shadow-sm border">
-        <div class="container-fluid py-2">
-            <h1 class="display-5 fw-bold text-dark">
-                Nullaismeretű kriptográfiai bizonyítás a fizetőképességről
-            </h1>
-            <p class="col-md-10 fs-5 text-muted mt-3">
-                Kriptográfiai igazolás a fizetőképességről adatminimalizációval.
-                A rendszer Merkle-fák és Rust-alapú zk-STARK technológia kombinációjával biztosítja a pénzügyi átláthatóságot, az ügyfelek adatvédelme mellett.
-            </p>
-            <a href="/proof-generation" class="btn btn-primary btn-lg mt-3 shadow-sm">
-                Bizonyítás generálása
-            </a>
+<style>
+    .dashboard-container {
+        background: linear-gradient(135deg, #001a33 0%, #003d66 100%);
+        min-height: 100vh;
+        padding: 2rem 0;
+    }
 
-            <a href="/clientverification" class="btn btn-outline-secondary btn-lg mt-3 ms-2 shadow-sm">
-                Azonosító hitelesítése
-            </a>
-        </div>
-    </div>
+    .hero-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
 
-    <!-- Statisztikai kártyák -->
-    <div class="row g-4 mb-4">
-        <!-- 1. Kártya: Rendszer állapota -->
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm border-0 border-bottom border-success border-3">
-                <div class="card-body text-center">
-                    <h6 class="text-uppercase text-muted fw-bold mb-3">Rendszer állapota</h6>
-                    <h2 class="display-6 fw-bold text-success mb-0">Fizetőképes</h2>
-                    <p class="card-text text-muted mt-2">Eszközök &ge; Kötelezettségek</p>
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        border-left: 5px solid #00b386;
+    }
+
+    .stat-card h6 {
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 1rem;
+        letter-spacing: 0.05em;
+    }
+
+    .stat-card .value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #001a33;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .subtext {
+        font-size: 0.9rem;
+        color: #999;
+    }
+
+    .solvency-ratio {
+        color: #00b386;
+    }
+
+    .solvency-ratio.warning {
+        color: #ff9800;
+    }
+
+    .solvency-ratio.critical {
+        color: #d32f2f;
+    }
+
+    .audit-button-container {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .audit-button {
+        background: linear-gradient(135deg, #00b386 0%, #009970 100%);
+        border: none;
+        color: white;
+        padding: 1.5rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        border-radius: 8px;
+        cursor: pointer;
+        box-shadow: 0 8px 25px rgba(0, 179, 134, 0.4);
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .audit-button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 35px rgba(0, 179, 134, 0.6);
+    }
+
+    .audit-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .audit-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .audit-panel {
+        background: #1a1a1a;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 800px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .audit-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #333;
+        color: white;
+        font-weight: 700;
+    }
+
+    .terminal-output {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        background: #0d0d0d;
+    }
+
+    .terminal-line {
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .terminal-line.pending {
+        color: #ffb700;
+    }
+
+    .terminal-line.complete {
+        color: #00b386;
+    }
+
+    .terminal-line.error {
+        color: #ff5252;
+    }
+
+    .step-icon {
+        min-width: 20px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #666;
+        border-top-color: #ffb700;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .checkmark {
+        display: inline-block;
+        color: #00b386;
+    }
+
+    .audit-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #333;
+        display: flex;
+        gap: 1rem;
+    }
+
+    .audit-footer button {
+        flex: 1;
+        padding: 0.75rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .close-button {
+        background: #333;
+        color: white;
+    }
+
+    .close-button:hover {
+        background: #444;
+    }
+
+    .retry-button {
+        background: #00b386;
+        color: white;
+    }
+
+    .retry-button:hover {
+        background: #009970;
+    }
+
+    .container-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+</style>
+
+<div class="dashboard-container">
+    <div class="container-inner">
+        <!-- Hero Stats Section -->
+        <div class="hero-stats">
+            <!-- Total Liabilities (Off-chain) -->
+            <div class="stat-card">
+                <h6>Összes kötelezettség (Off-chain)</h6>
+                <div class="value">
+                    @if (_totalLiabilities == 0 && !_isLoaded)
+                    {
+                        <span>Betöltés...</span>
+                    }
+                    else
+                    {
+                        <span>@_totalLiabilities.ToString("N0") unit</span>
+                    }
                 </div>
+                <div class="subtext">C# adatbázisból</div>
+            </div>
+
+            <!-- Total Assets (On-chain) -->
+            <div class="stat-card">
+                <h6>Összes Eszköz (On-chain)</h6>
+                <div class="value">
+                    @if (_totalAssets == 0 && !_isLoaded)
+                    {
+                        <span>Betöltés...</span>
+                    }
+                    else
+                    {
+                        <span>@_totalAssets.ToString("N0") unit</span>
+                    }
+                </div>
+                <div class="subtext">Az utolsó on-chain ellenőrzött auditból</div>
+            </div>
+
+            <!-- Solvency Ratio -->
+            <div class="stat-card">
+                <h6>Fizetőképességi Ráta</h6>
+                <div class="value solvency-ratio @GetSolvencyClass()">
+                    @if (_totalLiabilities == 0 && !_isLoaded)
+                    {
+                        <span>Betöltés...</span>
+                    }
+                    else if (_totalLiabilities == 0)
+                    {
+                        <span>∞</span>
+                    }
+                    else
+                    {
+                        <span>@_solvencyRatio.ToString("P1")</span>
+                    }
+                </div>
+                <div class="subtext">@(IsSolvent ? "Fizetőképes" : "Nem fizetőképes")</div>
             </div>
         </div>
 
-        <!-- 2. Kártya: Utolsó Merkle root -->
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm border-0 border-bottom border-primary border-3">
-                <div class="card-body text-center">
-                    <h6 class="text-uppercase text-muted fw-bold mb-3">
-                        Utolsó Audit (Merkle Root)
-                    </h6>
-
-                    <h2 class="fs-3 fw-bold text-dark mb-0 font-monospace">
-                        @_lastMerkleRoot
-                    </h2>
-                    <p class="card-text text-muted mt-2">Utolsó Merkle root</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. Kártya: Adatbázis statisztika -->
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm border-0 border-bottom border-info border-3">
-                <div class="card-body text-center">
-                    <h6 class="text-uppercase text-muted fw-bold mb-3">Ellenőrzött azonosítók</h6>
-                    <h2 class="display-6 fw-bold text-info mb-0">@_verificationQueryCount.ToString("N0")</h2>
-                    <p class="card-text text-muted mt-2">Off-chain EF Core adatbázisból</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Rendszernapló vagy információs panel? -->
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-white fw-bold">
-            Rendszer komponensek állapota
-        </div>
-        <div class="card-body">
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>C# .NET Entity Framework adatbázis</span>
-
-                    <span class="badge bg-success rounded-pill d-inline-flex align-items-center gap-2"
-                          role="status"
-                          aria-live="polite">
-                        <span class="bg-white rounded-circle"
-                              style="width: 0.5rem; height: 0.5rem;"
-                              aria-hidden="true"></span>
-                        Kapcsolódva
-                    </span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Rust zkVM Prover (STARK)
-                    <span class="badge bg-success rounded-pill">Elérhető</span>
-                </li>
-            </ul>
+        <!-- Audit Button -->
+        <div class="audit-button-container">
+            <button class="audit-button" @onclick="StartAudit" disabled="@_auditInProgress">
+                @if (_auditInProgress)
+                {
+                    <span>Audit végrehajtása...</span>
+                }
+                else
+                {
+                    <span>[ Kriptográfiai Audit Indítása ]</span>
+                }
+            </button>
         </div>
     </div>
 </div>
+
+<!-- Audit Progress Modal -->
+@if (_showAuditModal)
+{
+    <div class="audit-modal">
+        <div class="audit-panel">
+            <div class="audit-header">
+                ◈ Élő Kriptográfiai Audit Folyamat
+            </div>
+
+            <div class="terminal-output">
+                @foreach (var line in _auditLog)
+                {
+                    <div class="terminal-line @line.Status">
+                        <div class="step-icon">
+                            @if (line.Status == "complete")
+                            {
+                                <span class="checkmark">✓</span>
+                            }
+                            else if (line.Status == "pending")
+                            {
+                                <div class="spinner"></div>
+                            }
+                            else
+                            {
+                                <span>✗</span>
+                            }
+                        </div>
+                        <span>@line.Message</span>
+                    </div>
+                }
+            </div>
+
+            @if (!_auditInProgress)
+            {
+                <div class="audit-footer">
+                    @if (_auditSuccess)
+                    {
+                        <button class="close-button" @onclick="CloseAuditModal">Bezárás</button>
+                    }
+                    else
+                    {
+                        <button class="close-button" @onclick="CloseAuditModal">Bezárás</button>
+                        <button class="retry-button" @onclick="RetryAudit">Újra Próbálkozás</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
 @code {
-    private long _verificationQueryCount;
-    private string _lastMerkleRoot = "Még nem készült audit";
+    private decimal _totalLiabilities = 0;
+    private decimal _totalAssets = 0;
+    private decimal _solvencyRatio = 0;
+    private bool _isLoaded = false;
+    private bool _auditInProgress = false;
+    private bool _showAuditModal = false;
+    private bool _auditSuccess = false;
+    private List<AuditLogEntry> _auditLog = new();
+
+    private class AuditLogEntry
+    {
+        public string Message { get; set; } = "";
+        public string Status { get; set; } = "pending"; // pending, complete, error
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
-        _verificationQueryCount = await db.VerificationQueries.LongCountAsync();
+        await LoadDashboardData();
+    }
 
-        byte[]? lastRoot = await db.SolvencyAudit
-            .Where(audit => audit.Status == AuditStatus.VerifiedOnChain)
-            .OrderByDescending(audit => audit.Timestamp)
-            .Select(audit => audit.MerkleRoot)
+    private async Task LoadDashboardData()
+    {
+        await using SolvencyProofContext db = await DbFactory.CreateDbContextAsync();
+
+        // Liabilities (off-chain): what the institution owes its customers, from the SQL database (Kötelezettség: az ügyfelek egyenlegeinek összege az SQL adatbázisból)
+        _totalLiabilities = await db.Account.AsNoTracking().SumAsync(a => a.Balance);
+
+        // Assets (on-chain): taken from the latest audit confirmed on the blockchain (Eszköz: az utolsó, blokkláncon megerősített auditból)
+        SolvencyAudit? lastVerifiedAudit = await db.SolvencyAudit
+            .AsNoTracking()
+            .Where(a => a.Status == AuditStatus.VerifiedOnChain)
+            .OrderByDescending(a => a.Timestamp)
             .FirstOrDefaultAsync();
-        if (lastRoot is { Length: > 0 })
+        _totalAssets = lastVerifiedAudit?.TotalAssets ?? 0;
+
+        // Without liabilities there is nothing to cover, the ratio is shown as infinity (Kötelezettség nélkül a ráta végtelen)
+        _solvencyRatio = _totalLiabilities > 0 ? _totalAssets / _totalLiabilities : 0;
+
+        _isLoaded = true;
+    }
+
+    private bool IsSolvent => _totalLiabilities == 0 || _solvencyRatio >= 1;
+
+    // >= 100%: green (default), >= 80%: orange, below: red (>= 100%: zöld, >= 80%: narancssárga, alatta piros)
+    private string GetSolvencyClass()
+    {
+        if (IsSolvent)
+            return "";
+        else if (_solvencyRatio >= 0.8m)
+            return "warning";
+        else
+            return "critical";
+    }
+
+    private async Task StartAudit()
+    {
+        _auditInProgress = true;
+        _showAuditModal = true;
+        _auditSuccess = false;
+        _auditLog.Clear();
+        StateHasChanged();
+
+        // Progress<T> posts to the captured context; marshal to the Blazor renderer explicitly (A Blazor renderer szálára kell váltani)
+        var progress = new Progress<AuditProgressReport>(report => _ = InvokeAsync(() =>
         {
-            string hex = Convert.ToHexString(lastRoot).ToLowerInvariant();
-            _lastMerkleRoot = $"0x{hex[..4]}...{hex[^4..]}";
+            // The final "all finished" report is added below, together with the transaction hash of the result (A záró jelentést az eredménnyel együtt adjuk hozzá)
+            if (report.StepIndex <= AuditProgressReport.TotalSteps)
+            {
+                AddAuditStep($"{report.StepIndex}. {report.Message}");
+                StateHasChanged();
+            }
+        }));
+
+        try
+        {
+            Guid auditId;
+            await using (SolvencyProofContext db = await DbFactory.CreateDbContextAsync())
+            {
+                var audit = new SolvencyAudit
+                {
+                    Id = Guid.NewGuid(),
+                    Timestamp = DateTime.UtcNow,
+                    Status = AuditStatus.Prepared
+                };
+                db.SolvencyAudit.Add(audit);
+                await db.SaveChangesAsync();
+                auditId = audit.Id;
+            }
+
+            // The real pipeline: SQL -> Rust prover -> Hardhat chain (A valódi folyamat)
+            AuditProofResult result = await AuditProver.GenerateProofAsync(auditId, progress);
+
+            CompletePendingStep();
+            _auditLog.Add(new AuditLogEntry
+            {
+                Message = $"{AuditProgressReport.TotalSteps + 1}. Sikeres audit – az okosszerződés elfogadta a bizonyítékot! (TxHash: {result.TransactionHash})",
+                Status = "complete"
+            });
+            _auditSuccess = true;
+
+            await LoadDashboardData();
         }
+        catch (Exception ex)
+        {
+            // The step that was running when the error occurred is the failed one (A hibakor futó lépés a sikertelen)
+            int pendingIndex = _auditLog.FindLastIndex(l => l.Status == "pending");
+            if (pendingIndex >= 0)
+            {
+                _auditLog[pendingIndex].Status = "error";
+            }
+
+            _auditLog.Add(new AuditLogEntry { Message = $"Hiba: {ex.Message}", Status = "error" });
+            _auditSuccess = false;
+        }
+        finally
+        {
+            _auditInProgress = false;
+            StateHasChanged();
+        }
+    }
+
+    // A new step starts: the previous one is finished and the new one shows the spinner (Új lépés indul: az előző kész, az új forgó jelzőt kap)
+    private void AddAuditStep(string message)
+    {
+        CompletePendingStep();
+        _auditLog.Add(new AuditLogEntry { Message = message, Status = "pending" });
+    }
+
+    private void CompletePendingStep()
+    {
+        int lastPendingIndex = _auditLog.FindLastIndex(l => l.Status == "pending");
+        if (lastPendingIndex >= 0)
+        {
+            _auditLog[lastPendingIndex].Status = "complete";
+        }
+    }
+
+    private void CloseAuditModal()
+    {
+        _showAuditModal = false;
+        _auditLog.Clear();
+    }
+
+    private async Task RetryAudit()
+    {
+        CloseAuditModal();
+        await StartAudit();
     }
 }
