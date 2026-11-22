@@ -237,4 +237,63 @@ mod tests {
         };
         assert_forgery_is_rejected(&witness);
     }
+
+    fn splitmix64(state: &mut u64) -> u64 {
+        *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = *state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    fn sz3_field4(state: &mut u64) -> [F; 4] {
+        std::array::from_fn(|_| F::from_u64(splitmix64(state) >> 32))
+    }
+
+    /// One fresh witness of `SZ3_ACCOUNTS` accounts. `skewed` selects the heavy-tailed balance distribution;
+    /// both distributions give the same account count and the same surplus of the assets over the liabilities.
+    fn sz3_witness(state: &mut u64, skewed: bool) -> Witness {
+        const SZ3_ACCOUNTS: usize = 100;
+        const SZ3_SURPLUS: u64 = 1_000_000;
+        let mut leaves = Vec::with_capacity(SZ3_ACCOUNTS);
+        let mut liabilities = 0;
+        for _ in 0..SZ3_ACCOUNTS {
+            let balance = if skewed {
+                // The bit length is uniform, so most accounts are small and a few are close to 2^40.
+                let bits = 1 + splitmix64(state) % 39;
+                splitmix64(state) & ((1u64 << bits) - 1)
+            } else {
+                splitmix64(state) % (1 << 24)
+            };
+            liabilities += balance;
+            leaves.push(LeafData { id: sz3_field4(state), salt: sz3_field4(state), balance });
+        }
+        Witness { leaves, assets: liabilities + SZ3_SURPLUS, blinding: sz3_field4(state) }
+    }
+
+    /// SZ3 sample generator, ignored by default. Writes `SZ3_N` proofs, each of a fresh witness drawn from the
+    /// distribution `SZ3_SET` (`uniform` or `skewed`), into `SZ3_OUT`. Run with:
+    /// `SZ3_OUT=<dir> SZ3_SET=uniform SZ3_N=200 cargo test --release sz3_write_proof_samples -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn sz3_write_proof_samples() {
+        let dir = std::env::var("SZ3_OUT").expect("SZ3_OUT must name the output directory");
+        let set = std::env::var("SZ3_SET").expect("SZ3_SET must be `uniform` or `skewed`");
+        let count: usize = std::env::var("SZ3_N").expect("SZ3_N must be a number").parse().unwrap();
+        let skewed = match set.as_str() {
+            "uniform" => false,
+            "skewed" => true,
+            other => panic!("unknown SZ3_SET `{other}`"),
+        };
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let depth = crate::hash::depth_for(100);
+        // The seed differs per set so the two sets do not share ids, salts or blinding factors.
+        let mut state = if skewed { 0x5A33_5A33_5A33_5A34 } else { 0x5A33_5A33_5A33_5A33 };
+        for index in 0..count {
+            let witness = sz3_witness(&mut state, skewed);
+            let (bytes, _) = prove_solvency(depth, &witness, F::from_u64(7)).unwrap();
+            std::fs::write(format!("{dir}/{set}_{index:04}.bin"), &bytes).unwrap();
+        }
+    }
 }
